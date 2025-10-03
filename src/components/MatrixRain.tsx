@@ -20,11 +20,11 @@ export const MatrixRain = () => {
     const matrixArray = matrix.split('');
 
     const draw = () => {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+      ctx.fillStyle = 'rgba(10, 25, 47, 0.05)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = '#00ff41';
-      ctx.font = '15px monospace';
+      ctx.fillStyle = '#4dd0e1';
+      ctx.font = '14px monospace';
 
       for (let i = 0; i < drops.length; i++) {
         const text = matrixArray[Math.floor(Math.random() * matrixArray.length)];

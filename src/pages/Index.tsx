@@ -20,12 +20,12 @@ const Index = () => {
       {/* Matrix Rain Background */}
       <MatrixRain />
       
-      {/* Background Gradient Overlay */}
-      <div className="fixed inset-0 bg-gradient-to-br from-background via-deep-space to-secondary/20" style={{ zIndex: 1 }} />
+      {/* Premium Background Gradient */}
+      <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
       
-      {/* Animated Circles */}
-      <div className="fixed top-20 left-20 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1 }} />
-      <div className="fixed bottom-20 right-20 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1s' }} />
+      {/* Animated Premium Glows */}
+      <div className="fixed top-20 left-20 w-[600px] h-[600px] bg-primary/10 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1 }} />
+      <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
       {/* Login Container */}
       <div className="relative z-10 w-full max-w-md px-6 py-8 mx-4">
@@ -34,14 +34,14 @@ const Index = () => {
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
-            className="w-48 h-auto object-contain drop-shadow-[0_0_25px_rgba(0,255,65,0.3)]"
+            className="w-56 h-auto object-contain drop-shadow-[0_0_35px_rgba(77,208,225,0.4)]"
           />
         </div>
 
-        {/* Login Card */}
-        <div className="glass-effect rounded-2xl p-8 shadow-2xl">
+        {/* Premium Login Card */}
+        <div className="glass-effect rounded-2xl p-8 shadow-2xl border-glow">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold glow-matrix mb-2">
+            <h1 className="text-3xl font-bold glow-premium mb-2 tracking-tight">
               Bem-vindo
             </h1>
             <p className="text-muted-foreground text-sm">
@@ -134,11 +134,11 @@ const Index = () => {
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-xs text-muted-foreground matrix-code">
+          <p className="text-xs text-muted-foreground/80">
             © 2025 Global Institute of Cripto
           </p>
-          <p className="text-xs text-primary/60 mt-1 matrix-code">
-            v1.0.0 // SYSTEM_ONLINE
+          <p className="text-xs text-primary/50 mt-1 matrix-code">
+            SECURE • ENCRYPTED • VERIFIED
           </p>
         </div>
       </div>

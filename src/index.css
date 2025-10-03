@@ -8,47 +8,47 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Matrix-inspired crypto app design system */
-    --background: 0 0% 0%;
-    --foreground: 120 100% 50%;
+    /* Premium crypto app - Logo color palette */
+    --background: 210 50% 8%;
+    --foreground: 0 0% 98%;
 
-    --card: 200 50% 8%;
+    --card: 210 45% 12%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 200 50% 8%;
+    --popover: 210 45% 12%;
     --popover-foreground: 0 0% 98%;
 
-    /* Matrix green neon */
-    --primary: 120 100% 50%;
-    --primary-foreground: 0 0% 0%;
+    /* Premium cyan accent */
+    --primary: 190 95% 65%;
+    --primary-foreground: 210 50% 8%;
 
-    /* Deep navy blue from logo */
-    --secondary: 200 50% 10%;
+    /* Navy blue from logo */
+    --secondary: 210 50% 20%;
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 200 30% 15%;
-    --muted-foreground: 120 20% 70%;
+    --muted: 210 30% 25%;
+    --muted-foreground: 210 20% 70%;
 
-    --accent: 120 100% 50%;
-    --accent-foreground: 0 0% 0%;
+    --accent: 190 95% 65%;
+    --accent-foreground: 210 50% 8%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 120 100% 50% / 0.2;
-    --input: 200 50% 15%;
-    --ring: 120 100% 50%;
+    --border: 190 95% 65% / 0.15;
+    --input: 210 40% 15%;
+    --ring: 190 95% 65%;
 
     --radius: 0.75rem;
 
-    /* Custom tokens */
-    --matrix-glow: 120 100% 50%;
-    --deep-space: 200 50% 3%;
-    --cyber-blue: 200 70% 50%;
+    /* Custom premium tokens */
+    --premium-glow: 190 95% 65%;
+    --deep-navy: 210 55% 6%;
+    --gold-accent: 45 100% 70%;
     
-    /* Gradients */
-    --gradient-matrix: linear-gradient(135deg, hsl(200 50% 8%), hsl(120 100% 10% / 0.3));
-    --gradient-glow: radial-gradient(circle at center, hsl(120 100% 50% / 0.15), transparent);
+    /* Premium gradients */
+    --gradient-premium: linear-gradient(135deg, hsl(210 50% 12%), hsl(190 95% 20% / 0.3));
+    --gradient-glow: radial-gradient(circle at center, hsl(190 95% 65% / 0.15), transparent);
   }
 }
 
@@ -68,18 +68,18 @@ All colors MUST be HSL.
 }
 
 @layer utilities {
-  .glow-matrix {
-    text-shadow: 0 0 10px hsl(var(--matrix-glow)), 0 0 20px hsl(var(--matrix-glow) / 0.5);
+  .glow-premium {
+    text-shadow: 0 0 20px hsl(var(--premium-glow)), 0 0 40px hsl(var(--premium-glow) / 0.4);
   }
 
   .border-glow {
-    box-shadow: 0 0 15px hsl(var(--matrix-glow) / 0.3), inset 0 0 15px hsl(var(--matrix-glow) / 0.1);
+    box-shadow: 0 0 20px hsl(var(--premium-glow) / 0.2), inset 0 0 20px hsl(var(--premium-glow) / 0.05);
   }
 
   .glass-effect {
-    background: hsl(var(--card) / 0.4);
-    backdrop-filter: blur(12px);
-    border: 1px solid hsl(var(--matrix-glow) / 0.2);
+    background: linear-gradient(135deg, hsl(var(--card) / 0.6), hsl(var(--card) / 0.4));
+    backdrop-filter: blur(20px);
+    border: 1px solid hsl(var(--premium-glow) / 0.2);
   }
 
   /* Matrix rain animation */
