@@ -37,9 +37,9 @@ const Index = () => {
       <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
       {/* Login Container */}
-      <div className="relative z-10 w-full max-w-md px-6 mx-4 pt-[0.25cm]">
+      <div className="relative z-10 w-full max-w-md px-6 mx-4 pt-4">
         {/* Logo */}
-        <div className="flex justify-center mb-[0.25cm] animate-float">
+        <div className="flex justify-center mb-3 animate-float">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
