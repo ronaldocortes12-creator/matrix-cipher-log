@@ -13,6 +13,7 @@ const Index = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     console.log("Login attempt:", { email, password });
+    window.location.href = "/welcome/1";
   };
 
   return (
