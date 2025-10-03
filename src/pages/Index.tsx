@@ -37,32 +37,38 @@ const Index = () => {
       <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
       {/* Login Container */}
-      <div className="relative z-10 w-full max-w-md px-6 py-8 mx-4">
+      <div className="relative z-10 w-full max-w-md px-6 mx-4 pt-[0.5cm]">
         {/* Logo */}
-        <div className="flex justify-center mb-6 animate-float">
+        <div className="flex justify-center mb-[0.5cm] animate-float">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
-            className="w-64 h-auto object-contain drop-shadow-[0_0_35px_rgba(77,208,225,0.4)]"
+            className="w-72 h-auto object-contain drop-shadow-[0_0_40px_rgba(77,208,225,0.5)] filter brightness-110"
           />
         </div>
 
         {/* Premium Login Card */}
-        <div className="glass-effect rounded-2xl p-8 shadow-2xl border-glow relative overflow-hidden">
+        <div className="glass-effect rounded-2xl p-10 shadow-2xl border-glow relative overflow-hidden">
+          {/* Premium corner accents */}
+          <div className="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 border-primary/30 rounded-tl-2xl"></div>
+          <div className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary/30 rounded-tr-2xl"></div>
+          <div className="absolute bottom-0 left-0 w-20 h-20 border-b-2 border-l-2 border-primary/30 rounded-bl-2xl"></div>
+          <div className="absolute bottom-0 right-0 w-20 h-20 border-b-2 border-r-2 border-primary/30 rounded-br-2xl"></div>
           {/* Logo Background */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
             <img 
               src={logo} 
               alt="" 
-              className="w-[280px] h-auto object-contain opacity-[0.04] select-none"
+              className="w-[300px] h-auto object-contain opacity-[0.04] select-none"
             />
           </div>
 
-          <div className="text-center mb-8 relative z-10">
-            <h1 className="text-4xl font-bold mb-3 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
+          <div className="text-center mb-10 relative z-10">
+            <h1 className="text-5xl font-bold mb-4 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
               Acesso
             </h1>
-            <p className="text-muted-foreground text-base font-light leading-relaxed">
+            <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-4"></div>
+            <p className="text-muted-foreground text-base font-light leading-relaxed tracking-wide">
               O futuro da análise cripto chegou, bem-vindo (a)
             </p>
           </div>

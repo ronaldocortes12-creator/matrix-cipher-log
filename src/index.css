@@ -73,15 +73,20 @@ All colors MUST be HSL.
   }
 
   .border-glow {
-    box-shadow: 0 0 25px hsl(var(--premium-glow) / 0.25), 
-                0 0 50px hsl(var(--premium-glow) / 0.15),
-                inset 0 0 25px hsl(var(--premium-glow) / 0.06);
+    box-shadow: 0 0 30px hsl(var(--premium-glow) / 0.3), 
+                0 0 60px hsl(var(--premium-glow) / 0.2),
+                0 0 100px hsl(var(--premium-glow) / 0.1),
+                inset 0 0 30px hsl(var(--premium-glow) / 0.08),
+                inset 0 1px 0 hsl(var(--premium-glow) / 0.2);
   }
 
   .glass-effect {
-    background: linear-gradient(135deg, hsl(var(--card) / 0.7), hsl(var(--card) / 0.5));
-    backdrop-filter: blur(24px) saturate(150%);
-    border: 1px solid hsl(var(--premium-glow) / 0.25);
+    background: linear-gradient(135deg, 
+                hsl(var(--card) / 0.75), 
+                hsl(var(--card) / 0.55));
+    backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid hsl(var(--premium-glow) / 0.3);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 
   /* Matrix rain animation */
