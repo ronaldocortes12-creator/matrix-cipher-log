@@ -3,7 +3,7 @@ import { MatrixRain } from "@/components/MatrixRain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import logo from "@/assets/logo.jpg";
+import logo from "@/assets/logo.png";
 import { Lock, Mail } from "lucide-react";
 
 const Index = () => {
@@ -23,6 +23,15 @@ const Index = () => {
       {/* Premium Background Gradient */}
       <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
       
+      {/* Logo Watermark */}
+      <div className="fixed inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 1 }}>
+        <img 
+          src={logo} 
+          alt="" 
+          className="w-[800px] h-auto object-contain opacity-[0.03] select-none"
+        />
+      </div>
+      
       {/* Animated Premium Glows */}
       <div className="fixed top-20 left-20 w-[600px] h-[600px] bg-primary/10 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1 }} />
       <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
@@ -34,14 +43,14 @@ const Index = () => {
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
-            className="w-56 h-auto object-contain drop-shadow-[0_0_35px_rgba(77,208,225,0.4)]"
+            className="w-64 h-auto object-contain drop-shadow-[0_0_35px_rgba(77,208,225,0.4)]"
           />
         </div>
 
         {/* Premium Login Card */}
         <div className="glass-effect rounded-2xl p-8 shadow-2xl border-glow">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold glow-premium mb-2 tracking-tight">
+            <h1 className="text-3xl font-bold mb-2 tracking-tight">
               Bem-vindo
             </h1>
             <p className="text-muted-foreground text-sm">
