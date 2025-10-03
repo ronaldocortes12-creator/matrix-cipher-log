@@ -37,9 +37,9 @@ const Index = () => {
       <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
       {/* Login Container */}
-      <div className="relative z-10 w-full max-w-md px-6 mx-4 pt-4">
+      <div className="relative z-10 w-full max-w-md px-6 mx-4 pt-2">
         {/* Logo */}
-        <div className="flex justify-center mb-3 animate-float">
+        <div className="flex justify-center mb-1 animate-float">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
@@ -48,7 +48,7 @@ const Index = () => {
         </div>
 
         {/* Premium Login Card */}
-        <div className="glass-effect rounded-2xl p-10 shadow-2xl border-glow relative overflow-hidden">
+        <div className="glass-effect rounded-2xl p-8 pt-6 shadow-2xl border-glow relative overflow-hidden">
           {/* Premium corner accents */}
           <div className="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 border-primary/30 rounded-tl-2xl"></div>
           <div className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary/30 rounded-tr-2xl"></div>
@@ -63,11 +63,11 @@ const Index = () => {
             />
           </div>
 
-          <div className="text-center mb-10 relative z-10">
-            <h1 className="text-5xl font-bold mb-4 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
+          <div className="text-center mb-6 relative z-10">
+            <h1 className="text-5xl font-bold mb-3 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
               Acesso
             </h1>
-            <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-4"></div>
+            <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-3"></div>
             <p className="text-muted-foreground text-base font-light leading-relaxed tracking-wide">
               O futuro da análise cripto chegou, bem-vindo (a)
             </p>
