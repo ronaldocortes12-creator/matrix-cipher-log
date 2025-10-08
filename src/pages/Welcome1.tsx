@@ -24,8 +24,8 @@ const Welcome1 = () => {
       <div className="fixed top-20 left-20 w-[600px] h-[600px] bg-primary/10 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1 }} />
       <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
-      <div className="relative z-10 w-full max-w-3xl px-6 mx-4 py-8">
-        <div className="glass-effect rounded-2xl p-12 shadow-2xl border-glow relative overflow-hidden">
+      <div className="relative z-10 w-full max-w-3xl px-4 sm:px-6 mx-4 py-4 sm:py-8">
+        <div className="glass-effect rounded-2xl p-6 sm:p-12 shadow-2xl border-glow relative overflow-hidden">
           <div className="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 border-primary/30 rounded-tl-2xl"></div>
           <div className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary/30 rounded-tr-2xl"></div>
           <div className="absolute bottom-0 left-0 w-20 h-20 border-b-2 border-l-2 border-primary/30 rounded-bl-2xl"></div>
@@ -39,18 +39,18 @@ const Welcome1 = () => {
             />
           </div>
 
-          <div className="relative z-10 space-y-8">
-            <div className="text-center mb-12">
-              <h1 className="text-6xl font-bold mb-4 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
+          <div className="relative z-10 space-y-6 sm:space-y-8">
+            <div className="text-center mb-8 sm:mb-12">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold mb-3 sm:mb-4 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
                 Bem-vindo à nova era
               </h1>
-              <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-6"></div>
-              <p className="text-xl text-primary/80 font-light tracking-wider">
+              <div className="w-16 sm:w-24 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-4 sm:mb-6"></div>
+              <p className="text-base sm:text-xl text-primary/80 font-light tracking-wider">
                 da rentabilidade cripto
               </p>
             </div>
 
-            <div className="space-y-6 text-foreground/90 leading-relaxed text-lg">
+            <div className="space-y-4 sm:space-y-6 text-foreground/90 leading-relaxed text-sm sm:text-base md:text-lg">
               <p className="text-center font-light">
                 Aqui, no <span className="text-primary font-medium">Global Institute of Cripto</span>, não falamos de promessas vazias.
               </p>
@@ -59,11 +59,11 @@ const Welcome1 = () => {
                 Falamos de <span className="text-primary font-medium">dados</span>, <span className="text-primary font-medium">estudos</span> e a união entre especialistas de mercado e a mais avançada inteligência artificial.
               </p>
 
-              <div className="bg-primary/5 rounded-xl p-6 border border-primary/20 my-8">
-                <p className="text-center italic text-muted-foreground">
+              <div className="bg-primary/5 rounded-xl p-4 sm:p-6 border border-primary/20 my-6 sm:my-8">
+                <p className="text-center italic text-muted-foreground text-sm sm:text-base">
                   "Se não puder ser brilhante, seja claro"
                 </p>
-                <p className="text-center text-sm text-primary/60 mt-2">
+                <p className="text-center text-xs sm:text-sm text-primary/60 mt-2">
                   — David Ogilvy
                 </p>
               </div>
@@ -73,15 +73,15 @@ const Welcome1 = () => {
               </p>
             </div>
 
-            <div className="flex items-center justify-between mt-12 pt-8 border-t border-primary/20">
-              <span className="text-sm text-muted-foreground">Página 1 de 5</span>
+            <div className="flex items-center justify-between mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-primary/20">
+              <span className="text-xs sm:text-sm text-muted-foreground">Página 1 de 5</span>
               <Button 
                 onClick={() => navigate("/welcome/2")}
-                size="lg"
-                className="font-semibold tracking-wide"
+                size="default"
+                className="font-semibold tracking-wide text-xs sm:text-sm"
               >
                 Continuar
-                <ChevronRight className="ml-2 h-5 w-5" />
+                <ChevronRight className="ml-1 sm:ml-2 h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             </div>
           </div>

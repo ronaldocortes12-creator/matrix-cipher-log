@@ -85,7 +85,7 @@ const Welcome5 = () => {
             <div className="flex items-center justify-between mt-16 pt-8 border-t border-primary/20">
               <span className="text-sm text-muted-foreground">Página 5 de 5</span>
               <Button 
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate("/chat")}
                 size="lg"
                 className="font-semibold tracking-wide text-lg px-8"
               >
