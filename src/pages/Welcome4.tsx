@@ -83,7 +83,7 @@ const Welcome4 = () => {
             </div>
 
             <div className="flex items-center justify-between mt-12 pt-8 border-t border-primary/20">
-              <span className="text-sm text-muted-foreground">Página 4 de 5</span>
+              <span className="text-sm text-muted-foreground">Página 2 de 3</span>
               <Button 
                 onClick={() => navigate("/welcome/5")}
                 size="lg"
