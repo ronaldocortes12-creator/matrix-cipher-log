@@ -3,9 +3,28 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.png";
 import { Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Welcome5 = () => {
   const navigate = useNavigate();
+
+  const handleStart = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Marcar que o usuário já viu as welcome pages
+      await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.id,
+          has_seen_welcome: true
+        }, {
+          onConflict: 'user_id'
+        });
+    }
+    
+    navigate("/chat");
+  };
 
   return (
     <div className="min-h-screen w-full relative flex items-center justify-center overflow-hidden">
@@ -83,9 +102,9 @@ const Welcome5 = () => {
             </div>
 
             <div className="flex items-center justify-between mt-16 pt-8 border-t border-primary/20">
-              <span className="text-sm text-muted-foreground">Página 5 de 5</span>
+              <span className="text-sm text-muted-foreground">Página 3 de 3</span>
               <Button 
-                onClick={() => navigate("/chat")}
+                onClick={handleStart}
                 size="lg"
                 className="font-semibold tracking-wide text-lg px-8"
               >

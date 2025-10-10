@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabBar } from "@/components/TabBar";
 import { MatrixRain } from "@/components/MatrixRain";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 type Message = {
   id: number;
@@ -12,27 +14,64 @@ type Message = {
 };
 
 const Chat = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      role: "assistant",
-      content: "Olá! Sou sua IA educacional sobre criptomoedas. Como posso ajudá-lo hoje?",
-    },
-    {
-      id: 2,
-      role: "user",
-      content: "Como funcionam as ordens de stop loss?",
-    },
-    {
-      id: 3,
-      role: "assistant",
-      content: "Stop loss é uma ordem automática que vende seus ativos quando o preço atinge um determinado patamar, limitando suas perdas. É essencial para gestão de risco.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  // Carregar histórico do chat e verificar autenticação
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        window.location.href = "/";
+        return;
+      }
+
+      setUserId(user.id);
+
+      // Carregar mensagens do banco
+      const { data: chatMessages, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar histórico:', error);
+      } else if (chatMessages && chatMessages.length > 0) {
+        setMessages(chatMessages.map((msg, idx) => ({
+          id: idx + 1,
+          role: msg.role as "user" | "assistant",
+          content: msg.content
+        })));
+      } else {
+        // Mensagem inicial apenas se não houver histórico
+        const initialMessage: Message = {
+          id: 1,
+          role: "assistant",
+          content: "Seja bem-vindo, serei seu professor nesses próximos dias e eu mesmo vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto para os leigos. Me diga se você já entende o básico, caso já saiba, podemos pular a primeira parte."
+        };
+        setMessages([initialMessage]);
+        
+        // Salvar mensagem inicial no banco
+        await supabase.from('chat_messages').insert({
+          user_id: user.id,
+          role: 'assistant',
+          content: initialMessage.content
+        });
+      }
+      
+      setIsLoading(false);
+    };
+
+    loadChatHistory();
+  }, []);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !userId) return;
     
     const userMessage: Message = {
       id: messages.length + 1,
@@ -44,6 +83,13 @@ const Chat = () => {
     setMessages(updatedMessages);
     setInput("");
     
+    // Salvar mensagem do usuário no banco
+    await supabase.from('chat_messages').insert({
+      user_id: userId,
+      role: 'user',
+      content: userMessage.content
+    });
+    
     try {
       const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
       
@@ -54,6 +100,7 @@ const Chat = () => {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({ 
+          userId: userId,
           messages: updatedMessages.map(m => ({ 
             role: m.role, 
             content: m.content 
@@ -116,6 +163,41 @@ const Chat = () => {
           }
         }
       }
+      
+      // Salvar resposta do assistente no banco
+      if (assistantContent && userId) {
+        await supabase.from('chat_messages').insert({
+          user_id: userId,
+          role: 'assistant',
+          content: assistantContent
+        });
+        
+        // Verificar se a resposta contém confirmação de conclusão de aula
+        const lessonCompletionMatch = assistantContent.match(/Dia (\d+).*concluído|completamos.*Dia (\d+)/i);
+        if (lessonCompletionMatch) {
+          const lessonDay = parseInt(lessonCompletionMatch[1] || lessonCompletionMatch[2]);
+          if (lessonDay >= 1 && lessonDay <= 20) {
+            // Marcar a aula como concluída
+            const { error: progressError } = await supabase
+              .from('lesson_progress')
+              .upsert({
+                user_id: userId,
+                lesson_day: lessonDay,
+                completed: true,
+                completed_at: new Date().toISOString()
+              }, {
+                onConflict: 'user_id,lesson_day'
+              });
+            
+            if (!progressError) {
+              toast({
+                title: "Aula Concluída! 🎉",
+                description: `Dia ${lessonDay} foi marcado como completo.`,
+              });
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
       setMessages(prev => [...prev, {
@@ -125,6 +207,16 @@ const Chat = () => {
       }]);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full relative flex items-center justify-center">
+        <MatrixRain />
+        <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
+        <div className="relative z-10 text-primary">Carregando...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full relative flex flex-col">

@@ -1,19 +1,78 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MatrixRain } from "@/components/MatrixRain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import logo from "@/assets/logo.png";
 import { Lock, Mail } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Verificar se usuário já está logado
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        // Verificar se já viu as welcome pages
+        const { data: preferences } = await supabase
+          .from('user_preferences')
+          .select('has_seen_welcome')
+          .eq('user_id', user.id)
+          .single();
+
+        if (preferences?.has_seen_welcome) {
+          window.location.href = "/chat";
+        } else {
+          window.location.href = "/welcome/1";
+        }
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login attempt:", { email, password });
-    window.location.href = "/welcome/1";
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Verificar se já viu as welcome pages
+        const { data: preferences } = await supabase
+          .from('user_preferences')
+          .select('has_seen_welcome')
+          .eq('user_id', data.user.id)
+          .single();
+
+        if (preferences?.has_seen_welcome) {
+          window.location.href = "/chat";
+        } else {
+          window.location.href = "/welcome/1";
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro ao fazer login",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

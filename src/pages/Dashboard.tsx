@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { ChevronDown, CheckCircle2 } from "lucide-react";
 import { TabBar } from "@/components/TabBar";
 import { MatrixRain } from "@/components/MatrixRain";
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/accordion";
 
 type Lesson = {
+  day: number;
   title: string;
   completed: boolean;
 };
@@ -24,56 +26,105 @@ type Module = {
 };
 
 const Dashboard = () => {
-  const modules: Module[] = [
+  const [modules, setModules] = useState<Module[]>([
     {
       id: "1",
-      title: "Módulo 01",
+      title: "MÓDULO 01: FUNDAMENTOS",
       color: "hsl(220, 90%, 60%)",
       lessons: [
-        { title: "Introdução a Cripto", completed: true },
-        { title: "Movimentação de Criptos", completed: true },
-        { title: "Mercado Futuro", completed: false },
-        { title: "Spot x Futuro", completed: false },
-        { title: "O seu plano", completed: false },
+        { day: 1, title: "O Básico das Criptos", completed: false },
+        { day: 2, title: "Como o Dinheiro se Move", completed: false },
+        { day: 3, title: "Mercado Futuro Explicado", completed: false },
+        { day: 4, title: "Spot vs Futuro", completed: false },
+        { day: 5, title: "Seu Plano Financeiro", completed: false },
       ],
     },
     {
       id: "2",
-      title: "Módulo 02",
+      title: "MÓDULO 02: ANÁLISE",
       color: "hsl(270, 90%, 60%)",
       lessons: [
-        { title: "A análise", completed: false },
-        { title: "Gráfico x Vector", completed: true },
-        { title: "Indicadores", completed: false },
-        { title: "Ranges", completed: false },
-        { title: "Gradiente Linear", completed: false },
+        { day: 6, title: "A Matemática do Trader", completed: false },
+        { day: 7, title: "Dominando o Vector", completed: false },
+        { day: 8, title: "Os Indicadores que Importam", completed: false },
+        { day: 9, title: "Trabalhando com Ranges", completed: false },
+        { day: 10, title: "Gradiente Linear", completed: false },
       ],
     },
     {
       id: "3",
-      title: "Módulo 03",
+      title: "MÓDULO 03: PRÁTICA",
       color: "hsl(330, 90%, 60%)",
       lessons: [
-        { title: "O operacional", completed: false },
-        { title: "Bitget", completed: false },
-        { title: "Vector", completed: true },
-        { title: "Proteção Patrimonial", completed: false },
-        { title: "Gestão de Metas", completed: false },
+        { day: 11, title: "Nossa Estratégia", completed: false },
+        { day: 12, title: "Conhecendo a Bitget", completed: false },
+        { day: 13, title: "Vector na Prática", completed: false },
+        { day: 14, title: "Seu Maior Inimigo: Você Mesmo", completed: false },
+        { day: 15, title: "Simulando suas Primeiras Operações", completed: false },
       ],
     },
     {
       id: "4",
-      title: "Treino com IA",
+      title: "MÓDULO 04: INDO PRO REAL",
       color: "hsl(30, 95%, 60%)",
       lessons: [
-        { title: "Simulador com metas do mês", completed: false },
-        { title: "IA para trazer relatório", completed: false },
-        { title: "IA que guia e instrui", completed: true },
-        { title: "IA com estatísticas e ranges estudados", completed: false },
-        { title: "APP com indicadores e comunidade", completed: false },
+        { day: 16, title: "Hora da Verdade", completed: false },
+        { day: 17, title: "Colocando Dinheiro na Corretora", completed: false },
+        { day: 18, title: "Acompanhamento e Metas", completed: false },
+        { day: 19, title: "Consultoria Permanente", completed: false },
+        { day: 20, title: "Liberdade Financeira", completed: false },
       ],
     },
-  ];
+  ]);
+
+  useEffect(() => {
+    const loadProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: progressData } = await supabase
+        .from('lesson_progress')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (progressData) {
+        setModules(prevModules => 
+          prevModules.map(module => ({
+            ...module,
+            lessons: module.lessons.map(lesson => {
+              const progress = progressData.find(p => p.lesson_day === lesson.day);
+              return {
+                ...lesson,
+                completed: progress?.completed || false
+              };
+            })
+          }))
+        );
+      }
+    };
+
+    loadProgress();
+
+    // Atualizar em tempo real
+    const channel = supabase
+      .channel('lesson_progress_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lesson_progress'
+        },
+        () => {
+          loadProgress();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const totalLessons = modules.reduce((acc, module) => acc + module.lessons.length, 0);
   const completedLessons = modules.reduce(
@@ -156,7 +207,10 @@ const Dashboard = () => {
                           lesson.completed ? "text-primary" : "text-muted-foreground/50"
                         )}
                       />
-                      <span className="text-sm">{lesson.title}</span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">Dia {lesson.day}</span>
+                        <span className="text-xs text-muted-foreground">{lesson.title}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
