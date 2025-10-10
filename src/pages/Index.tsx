@@ -25,7 +25,7 @@ const Index = () => {
           .from('user_preferences')
           .select('has_seen_welcome')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (preferences?.has_seen_welcome) {
           window.location.href = "/chat";
@@ -56,7 +56,7 @@ const Index = () => {
           .from('user_preferences')
           .select('has_seen_welcome')
           .eq('user_id', data.user.id)
-          .single();
+          .maybeSingle();
 
         if (preferences?.has_seen_welcome) {
           window.location.href = "/chat";
@@ -67,6 +67,35 @@ const Index = () => {
     } catch (error: any) {
       toast({
         title: "Erro ao fazer login",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignup = async () => {
+    setIsLoading(true);
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectUrl }
+      });
+      if (error) throw error;
+
+      toast({
+        title: "Conta criada com sucesso",
+        description: "Redirecionando para o início do onboarding...",
+      });
+
+      // Redireciona para o onboarding inicial
+      window.location.href = "/welcome/1";
+    } catch (error: any) {
+      toast({
+        title: "Erro ao cadastrar",
         description: error.message,
         variant: "destructive",
       });
@@ -207,6 +236,7 @@ const Index = () => {
                 Não tem uma conta?{" "}
                 <button
                   type="button"
+                  onClick={handleSignup}
                   className="text-primary hover:text-primary/80 font-medium transition-colors"
                 >
                   Cadastre-se
