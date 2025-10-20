@@ -18,30 +18,94 @@ const Chat = () => {
   const [input, setInput] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
   const { toast } = useToast();
 
-  // Carregar histórico do chat e verificar autenticação
+  // Gerenciar autenticação e sessão com listener
   useEffect(() => {
-    const loadChatHistory = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+    const initializeAuth = async () => {
+      console.log('[CHAT] Inicializando autenticação...');
       
-      if (!user) {
+      // Primeiro, configurar o listener
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          console.log('[AUTH EVENT]', event, 'User:', session?.user?.id);
+          
+          if (event === 'SIGNED_OUT') {
+            console.log('[CHAT] Usuário deslogado, redirecionando...');
+            window.location.href = "/";
+            return;
+          }
+          
+          if (session?.user && !userId) {
+            console.log('[CHAT] Nova sessão detectada, carregando dados...');
+            setUserId(session.user.id);
+            await loadChatHistory(session.user.id);
+          }
+        }
+      );
+
+      // Depois, verificar sessão existente
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('[CHAT] Erro ao obter sessão:', sessionError);
+        toast({
+          title: "Erro de autenticação",
+          description: "Não foi possível verificar sua sessão. Redirecionando...",
+          variant: "destructive"
+        });
+        setTimeout(() => window.location.href = "/", 2000);
+        return;
+      }
+
+      if (!session?.user) {
+        console.log('[CHAT] Sem sessão válida, redirecionando para login...');
         window.location.href = "/";
         return;
       }
 
-      setUserId(user.id);
+      console.log('[CHAT] Sessão válida encontrada. User ID:', session.user.id);
+      setUserId(session.user.id);
+      await loadChatHistory(session.user.id);
 
-      // Carregar mensagens do banco
+      return () => {
+        console.log('[CHAT] Limpando subscription de auth');
+        subscription.unsubscribe();
+      };
+    };
+
+    initializeAuth();
+  }, []);
+
+  // Função separada para carregar histórico
+  const loadChatHistory = async (uid: string) => {
+    try {
+      console.log('[CHAT] Carregando histórico para user:', uid);
+      setSyncStatus('syncing');
+      
       const { data: chatMessages, error } = await supabase
         .from('chat_messages')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', uid)
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Erro ao carregar histórico:', error);
-      } else if (chatMessages && chatMessages.length > 0) {
+        console.error('[CHAT] Erro ao carregar histórico:', error);
+        setSyncStatus('error');
+        toast({
+          title: "Erro ao carregar histórico",
+          description: error.message,
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[CHAT] Mensagens carregadas:', chatMessages?.length || 0);
+
+      if (chatMessages && chatMessages.length > 0) {
         setMessages(chatMessages.map((msg, idx) => ({
           id: idx + 1,
           role: msg.role as "user" | "assistant",
@@ -49,6 +113,7 @@ const Chat = () => {
         })));
       } else {
         // Mensagem inicial apenas se não houver histórico
+        console.log('[CHAT] Nenhum histórico encontrado, criando mensagem inicial...');
         const initialMessage: Message = {
           id: 1,
           role: "assistant",
@@ -57,21 +122,42 @@ const Chat = () => {
         setMessages([initialMessage]);
         
         // Salvar mensagem inicial no banco
-        await supabase.from('chat_messages').insert({
-          user_id: user.id,
+        const { error: insertError } = await supabase.from('chat_messages').insert({
+          user_id: uid,
           role: 'assistant',
           content: initialMessage.content
         });
+
+        if (insertError) {
+          console.error('[CHAT] Erro ao salvar mensagem inicial:', insertError);
+        } else {
+          console.log('[CHAT] Mensagem inicial salva com sucesso');
+        }
       }
       
+      setSyncStatus('idle');
       setIsLoading(false);
-    };
-
-    loadChatHistory();
-  }, []);
+    } catch (error) {
+      console.error('[CHAT] Exceção ao carregar histórico:', error);
+      setSyncStatus('error');
+      setIsLoading(false);
+      toast({
+        title: "Erro crítico",
+        description: "Falha ao inicializar o chat. Tente recarregar a página.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleSend = async () => {
-    if (!input.trim() || !userId) return;
+    if (!input.trim() || !userId || isSending) {
+      console.log('[SEND] Bloqueado - input vazio, sem userId ou já enviando');
+      return;
+    }
+    
+    console.log('[SEND] Iniciando envio de mensagem...');
+    setIsSending(true);
+    setSyncStatus('syncing');
     
     const userMessage: Message = {
       id: messages.length + 1,
@@ -83,15 +169,51 @@ const Chat = () => {
     setMessages(updatedMessages);
     setInput("");
     
-    // Salvar mensagem do usuário no banco
-    await supabase.from('chat_messages').insert({
-      user_id: userId,
-      role: 'user',
-      content: userMessage.content
-    });
+    try {
+      // Salvar mensagem do usuário no banco com retry
+      console.log('[SEND] Salvando mensagem do usuário no banco...');
+      let saveAttempts = 0;
+      let saveError = null;
+      
+      while (saveAttempts < 3) {
+        const { error } = await supabase.from('chat_messages').insert({
+          user_id: userId,
+          role: 'user',
+          content: userMessage.content
+        });
+        
+        if (!error) {
+          console.log('[SEND] Mensagem salva com sucesso');
+          break;
+        }
+        
+        saveError = error;
+        saveAttempts++;
+        console.error(`[SEND] Tentativa ${saveAttempts}/3 falhou:`, error);
+        
+        if (saveAttempts < 3) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (saveError && saveAttempts === 3) {
+        throw new Error(`Falha ao salvar mensagem após 3 tentativas: ${saveError.message}`);
+      }
+    } catch (error: any) {
+      console.error('[SEND] Erro ao salvar mensagem:', error);
+      toast({
+        title: "Erro ao salvar",
+        description: "Sua mensagem não foi salva. Tente novamente.",
+        variant: "destructive"
+      });
+      setSyncStatus('error');
+      setIsSending(false);
+      return;
+    }
     
     try {
       const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+      console.log('[SEND] Chamando edge function:', CHAT_URL);
       
       const resp = await fetch(CHAT_URL, {
         method: "POST",
@@ -108,8 +230,20 @@ const Chat = () => {
         }),
       });
 
+      console.log('[SEND] Resposta da edge function:', resp.status, resp.statusText);
+
+      if (resp.status === 429) {
+        throw new Error("RATE_LIMIT");
+      }
+      
+      if (resp.status === 402) {
+        throw new Error("NO_CREDITS");
+      }
+
       if (!resp.ok || !resp.body) {
-        throw new Error("Falha ao conectar com a IA");
+        const errorText = await resp.text();
+        console.error('[SEND] Erro da API:', errorText);
+        throw new Error(`Falha na API: ${resp.status} - ${errorText}`);
       }
 
       const reader = resp.body.getReader();
@@ -164,20 +298,35 @@ const Chat = () => {
         }
       }
       
+      console.log('[SEND] Stream concluído. Conteúdo total:', assistantContent.length, 'caracteres');
+      
       // Salvar resposta do assistente no banco
       if (assistantContent && userId) {
-        await supabase.from('chat_messages').insert({
+        console.log('[SEND] Salvando resposta do assistente...');
+        const { error: saveError } = await supabase.from('chat_messages').insert({
           user_id: userId,
           role: 'assistant',
           content: assistantContent
         });
         
+        if (saveError) {
+          console.error('[SEND] Erro ao salvar resposta:', saveError);
+          toast({
+            title: "Aviso",
+            description: "A resposta foi gerada mas pode não ter sido salva.",
+            variant: "destructive"
+          });
+        } else {
+          console.log('[SEND] Resposta salva com sucesso');
+        }
+        
         // Verificar se a resposta contém confirmação de conclusão de aula
         const lessonCompletionMatch = assistantContent.match(/Dia (\d+).*concluído|completamos.*Dia (\d+)/i);
         if (lessonCompletionMatch) {
           const lessonDay = parseInt(lessonCompletionMatch[1] || lessonCompletionMatch[2]);
+          console.log('[LESSON] Detectada conclusão do Dia', lessonDay);
+          
           if (lessonDay >= 1 && lessonDay <= 20) {
-            // Marcar a aula como concluída
             const { error: progressError } = await supabase
               .from('lesson_progress')
               .upsert({
@@ -189,7 +338,10 @@ const Chat = () => {
                 onConflict: 'user_id,lesson_day'
               });
             
-            if (!progressError) {
+            if (progressError) {
+              console.error('[LESSON] Erro ao salvar progresso:', progressError);
+            } else {
+              console.log('[LESSON] Progresso salvo com sucesso');
               toast({
                 title: "Aula Concluída! 🎉",
                 description: `Dia ${lessonDay} foi marcado como completo.`,
@@ -198,13 +350,37 @@ const Chat = () => {
           }
         }
       }
-    } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
+      
+      setSyncStatus('idle');
+    } catch (error: any) {
+      console.error("[SEND] Erro ao enviar mensagem:", error);
+      
+      let errorMessage = "Desculpe, ocorreu um erro. Por favor, tente novamente.";
+      let errorTitle = "Erro ao enviar";
+      
+      if (error.message === "RATE_LIMIT") {
+        errorMessage = "Limite de requisições atingido. Por favor, aguarde alguns instantes e tente novamente.";
+        errorTitle = "Limite atingido";
+      } else if (error.message === "NO_CREDITS") {
+        errorMessage = "Créditos da IA esgotados. Por favor, contate o administrador do sistema.";
+        errorTitle = "Sem créditos";
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive"
+      });
+      
       setMessages(prev => [...prev, {
         id: prev.length + 1,
         role: "assistant",
-        content: "Desculpe, ocorreu um erro. Por favor, tente novamente.",
+        content: errorMessage,
       }]);
+      
+      setSyncStatus('error');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -253,15 +429,29 @@ const Chat = () => {
 
       {/* Input Area */}
       <div className="relative z-10 bg-card/95 backdrop-blur-lg border-t border-primary/20 p-4 pb-20">
+        {/* Status Indicator */}
+        {syncStatus !== 'idle' && (
+          <div className="max-w-4xl mx-auto mb-2 text-xs text-center">
+            {syncStatus === 'syncing' && <span className="text-primary">● Sincronizando...</span>}
+            {syncStatus === 'error' && <span className="text-destructive">● Erro de sincronização</span>}
+          </div>
+        )}
+        
         <div className="flex gap-2 max-w-4xl mx-auto">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Digite sua pergunta..."
+            onKeyPress={(e) => e.key === "Enter" && !isSending && handleSend()}
+            placeholder={isSending ? "Enviando..." : "Digite sua pergunta..."}
+            disabled={isSending}
             className="flex-1 bg-input border-primary/20 focus:border-primary/40"
           />
-          <Button onClick={handleSend} size="icon" className="shrink-0">
+          <Button 
+            onClick={handleSend} 
+            size="icon" 
+            className="shrink-0"
+            disabled={isSending || !input.trim()}
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>

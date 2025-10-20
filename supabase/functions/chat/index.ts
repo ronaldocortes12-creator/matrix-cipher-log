@@ -8,10 +8,18 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  const requestId = crypto.randomUUID().substring(0, 8);
+  console.log(`[${requestId}] Nova requisição recebida`);
+
   try {
     const { messages, userId } = await req.json();
+    console.log(`[${requestId}] User ID: ${userId}, Mensagens: ${messages?.length || 0}`);
+    
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      console.error(`[${requestId}] LOVABLE_API_KEY não configurada`);
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
 
     const systemPrompt = `Você é Jeff Wu, um professor de trading de criptomoedas direto, prático e bem-humorado. Seu estilo de comunicação é inspirado em Mark Manson: sem rodeios, realista, com humor inteligente e analogias certeiras quando necessário. Você dá choques de realidade, mas sempre apoiando o aluno. Evite palavrões excessivos, use apenas ocasionalmente quando fizer sentido naturalmente.
 
@@ -114,6 +122,7 @@ Após completar o curso de 20 dias:
 
 Lembre-se: Você está formando traders disciplinados que vão viver de cripto. Cada interação deve agregar valor real.`;
 
+    console.log(`[${requestId}] Chamando Lovable AI Gateway...`);
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -130,32 +139,37 @@ Lembre-se: Você está formando traders disciplinados que vão viver de cripto. 
       }),
     });
 
+    console.log(`[${requestId}] Resposta da AI: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
       if (response.status === 429) {
+        console.warn(`[${requestId}] Rate limit atingido`);
         return new Response(JSON.stringify({ error: "Limite de uso excedido. Tente novamente em alguns instantes." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
+        console.error(`[${requestId}] Créditos esgotados`);
         return new Response(JSON.stringify({ error: "Créditos insuficientes. Por favor, adicione créditos." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+      console.error(`[${requestId}] AI gateway error:`, response.status, t);
       return new Response(JSON.stringify({ error: "Erro ao processar sua solicitação." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    console.log(`[${requestId}] Iniciando stream de resposta`);
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("chat error:", e);
+    console.error(`[${requestId}] Erro crítico:`, e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
