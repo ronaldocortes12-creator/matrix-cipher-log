@@ -8,47 +8,49 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Premium crypto app - Logo color palette */
-    --background: 210 50% 8%;
-    --foreground: 0 0% 98%;
+    /* Premium Dark Futuristic Design System */
+    --background: 220 50% 4%;
+    --foreground: 210 40% 98%;
 
-    --card: 210 45% 12%;
-    --card-foreground: 0 0% 98%;
+    --card: 220 45% 7%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 210 45% 12%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 220 45% 7%;
+    --popover-foreground: 210 40% 98%;
 
-    /* Premium cyan accent */
-    --primary: 190 95% 65%;
-    --primary-foreground: 210 50% 8%;
+    /* Darker premium cyan */
+    --primary: 190 85% 50%;
+    --primary-foreground: 220 50% 4%;
 
-    /* Navy blue from logo */
-    --secondary: 210 50% 20%;
-    --secondary-foreground: 0 0% 98%;
+    /* Deeper navy */
+    --secondary: 220 50% 10%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 210 30% 25%;
-    --muted-foreground: 210 20% 70%;
+    --muted: 220 40% 12%;
+    --muted-foreground: 215 20% 55%;
 
-    --accent: 190 95% 65%;
-    --accent-foreground: 210 50% 8%;
+    --accent: 190 75% 45%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 190 95% 65% / 0.15;
-    --input: 210 40% 15%;
-    --ring: 190 95% 65%;
+    --border: 220 40% 15%;
+    --input: 220 40% 12%;
+    --ring: 190 85% 50%;
 
     --radius: 0.75rem;
 
-    /* Custom premium tokens */
-    --premium-glow: 190 95% 65%;
-    --deep-navy: 210 55% 6%;
-    --gold-accent: 45 100% 70%;
+    /* Premium tokens - darker and more futuristic */
+    --premium-glow: 190 85% 50%;
+    --deep-navy: 220 55% 3%;
+    --cyber-blue: 190 100% 55%;
+    --cyber-accent: 280 70% 60%;
     
-    /* Premium gradients */
-    --gradient-premium: linear-gradient(135deg, hsl(210 50% 12%), hsl(190 95% 20% / 0.3));
-    --gradient-glow: radial-gradient(circle at center, hsl(190 95% 65% / 0.15), transparent);
+    /* Advanced gradients */
+    --gradient-premium: linear-gradient(135deg, hsl(220 45% 7% / 0.95), hsl(190 85% 15% / 0.2));
+    --gradient-glow: radial-gradient(circle at center, hsl(190 85% 50% / 0.15), transparent);
+    --gradient-cyber: linear-gradient(135deg, hsl(190 85% 50% / 0.1) 0%, hsl(280 70% 60% / 0.05) 100%);
   }
 }
 

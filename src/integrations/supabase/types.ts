@@ -19,6 +19,7 @@ export type Database = {
           content: string
           created_at: string | null
           id: string
+          lesson_id: string | null
           role: string
           user_id: string
         }
@@ -26,6 +27,7 @@ export type Database = {
           content: string
           created_at?: string | null
           id?: string
+          lesson_id?: string | null
           role: string
           user_id: string
         }
@@ -33,10 +35,19 @@ export type Database = {
           content?: string
           created_at?: string | null
           id?: string
+          lesson_id?: string | null
           role?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       lesson_progress: {
         Row: {
@@ -61,6 +72,69 @@ export type Database = {
           created_at?: string | null
           id?: string
           lesson_day?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      lessons: {
+        Row: {
+          created_at: string | null
+          id: string
+          lesson_number: number
+          status: string
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          lesson_number: number
+          status?: string
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          lesson_number?: number
+          status?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          age: number | null
+          avatar_url: string | null
+          created_at: string | null
+          crypto_experience: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          age?: number | null
+          avatar_url?: string | null
+          created_at?: string | null
+          crypto_experience?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          age?: number | null
+          avatar_url?: string | null
+          created_at?: string | null
+          crypto_experience?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
