@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabBar } from "@/components/TabBar";
 import { MatrixRain } from "@/components/MatrixRain";
+import { ChatSidebar } from "@/components/ChatSidebar";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import jeffAvatar from "@/assets/jeff-wu-avatar.png";
 
 type Message = {
   id: number;
@@ -13,372 +15,352 @@ type Message = {
   content: string;
 };
 
+type Lesson = {
+  id: string;
+  lesson_number: number;
+  title: string;
+  status: 'pending' | 'active' | 'completed';
+};
+
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+
 const Chat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Gerenciar autenticação e sessão com listener
   useEffect(() => {
-    const initializeAuth = async () => {
-      console.log('[CHAT] Inicializando autenticação...');
-      
-      // Primeiro, configurar o listener
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          console.log('[AUTH EVENT]', event, 'User:', session?.user?.id);
-          
-          if (event === 'SIGNED_OUT') {
-            console.log('[CHAT] Usuário deslogado, redirecionando...');
-            window.location.href = "/";
-            return;
-          }
-          
-          if (session?.user && !userId) {
-            console.log('[CHAT] Nova sessão detectada, carregando dados...');
-            setUserId(session.user.id);
-            await loadChatHistory(session.user.id);
-          }
-        }
-      );
+    initializeChat();
+  }, []);
 
-      // Depois, verificar sessão existente
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) {
-        console.error('[CHAT] Erro ao obter sessão:', sessionError);
-        toast({
-          title: "Erro de autenticação",
-          description: "Não foi possível verificar sua sessão. Redirecionando...",
-          variant: "destructive"
-        });
-        setTimeout(() => window.location.href = "/", 2000);
-        return;
-      }
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const initializeChat = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        console.log('[CHAT] Sem sessão válida, redirecionando para login...');
         window.location.href = "/";
         return;
       }
 
-      console.log('[CHAT] Sessão válida encontrada. User ID:', session.user.id);
       setUserId(session.user.id);
-      await loadChatHistory(session.user.id);
+      await Promise.all([
+        loadLessons(session.user.id),
+        loadChatHistory(session.user.id)
+      ]);
+    } catch (error) {
+      console.error('Error initializing chat:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      return () => {
-        console.log('[CHAT] Limpando subscription de auth');
-        subscription.unsubscribe();
-      };
-    };
+  const loadLessons = async (uid: string) => {
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('user_id', uid)
+      .order('lesson_number', { ascending: true });
 
-    initializeAuth();
-  }, []);
+    if (error) {
+      console.error('Error loading lessons:', error);
+      return;
+    }
 
-  // Função separada para carregar histórico
+    if (data && data.length > 0) {
+      setLessons(data.map(l => ({
+        id: l.id,
+        lesson_number: l.lesson_number,
+        title: l.title,
+        status: l.status as 'pending' | 'active' | 'completed'
+      })));
+      const activeLesson = data.find(l => l.status === 'active') || data[0];
+      setActiveLessonId(activeLesson.id);
+    }
+  };
+
   const loadChatHistory = async (uid: string) => {
-    try {
-      console.log('[CHAT] Carregando histórico para user:', uid);
-      setSyncStatus('syncing');
+    const activeLesson = lessons.find(l => l.id === activeLessonId);
+    
+    const query = supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: true });
+
+    if (activeLessonId) {
+      query.eq('lesson_id', activeLessonId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error loading messages:', error);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      setMessages(data.map((msg, idx) => ({
+        id: idx + 1,
+        role: msg.role as "user" | "assistant",
+        content: msg.content
+      })));
+    } else {
+      // Initial message
+      const initialMessage: Message = {
+        id: 1,
+        role: "assistant",
+        content: "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte."
+      };
+      setMessages([initialMessage]);
       
-      const { data: chatMessages, error } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('user_id', uid)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('[CHAT] Erro ao carregar histórico:', error);
-        setSyncStatus('error');
-        toast({
-          title: "Erro ao carregar histórico",
-          description: error.message,
-          variant: "destructive"
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('[CHAT] Mensagens carregadas:', chatMessages?.length || 0);
-
-      if (chatMessages && chatMessages.length > 0) {
-        setMessages(chatMessages.map((msg, idx) => ({
-          id: idx + 1,
-          role: msg.role as "user" | "assistant",
-          content: msg.content
-        })));
-      } else {
-        // Mensagem inicial apenas se não houver histórico
-        console.log('[CHAT] Nenhum histórico encontrado, criando mensagem inicial...');
-        const initialMessage: Message = {
-          id: 1,
-          role: "assistant",
-          content: "Seja bem-vindo, serei seu professor nesses próximos dias e eu mesmo vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto para os leigos. Me diga se você já entende o básico, caso já saiba, podemos pular a primeira parte."
-        };
-        setMessages([initialMessage]);
-        
-        // Salvar mensagem inicial no banco
-        const { error: insertError } = await supabase.from('chat_messages').insert({
+      if (uid && activeLessonId) {
+        await supabase.from('chat_messages').insert({
           user_id: uid,
+          lesson_id: activeLessonId,
           role: 'assistant',
           content: initialMessage.content
         });
-
-        if (insertError) {
-          console.error('[CHAT] Erro ao salvar mensagem inicial:', insertError);
-        } else {
-          console.log('[CHAT] Mensagem inicial salva com sucesso');
-        }
       }
-      
-      setSyncStatus('idle');
-      setIsLoading(false);
-    } catch (error) {
-      console.error('[CHAT] Exceção ao carregar histórico:', error);
-      setSyncStatus('error');
-      setIsLoading(false);
-      toast({
-        title: "Erro crítico",
-        description: "Falha ao inicializar o chat. Tente recarregar a página.",
-        variant: "destructive"
-      });
+    }
+  };
+
+  const handleSelectLesson = async (lessonId: string) => {
+    setActiveLessonId(lessonId);
+    setMessages([]);
+    if (userId) {
+      await loadChatHistory(userId);
     }
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !userId || isSending) {
-      console.log('[SEND] Bloqueado - input vazio, sem userId ou já enviando');
-      return;
-    }
-    
-    console.log('[SEND] Iniciando envio de mensagem...');
-    setIsSending(true);
-    setSyncStatus('syncing');
-    
+    if (!input.trim() || isSending || !userId || !activeLessonId) return;
+
     const userMessage: Message = {
       id: messages.length + 1,
       role: "user",
-      content: input,
+      content: input.trim()
     };
-    
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
+
+    setMessages(prev => [...prev, userMessage]);
     setInput("");
+    setIsSending(true);
+
+    // Save user message
+    let retries = 0;
+    const maxRetries = 3;
     
-    try {
-      // Salvar mensagem do usuário no banco com retry
-      console.log('[SEND] Salvando mensagem do usuário no banco...');
-      let saveAttempts = 0;
-      let saveError = null;
-      
-      while (saveAttempts < 3) {
-        const { error } = await supabase.from('chat_messages').insert({
+    while (retries < maxRetries) {
+      try {
+        const { error: saveError } = await supabase.from('chat_messages').insert({
           user_id: userId,
+          lesson_id: activeLessonId,
           role: 'user',
           content: userMessage.content
         });
-        
-        if (!error) {
-          console.log('[SEND] Mensagem salva com sucesso');
-          break;
+
+        if (saveError) throw saveError;
+        break;
+      } catch (error) {
+        retries++;
+        if (retries >= maxRetries) {
+          toast({
+            title: "Erro ao salvar mensagem",
+            description: "Sua mensagem pode não ter sido salva",
+            variant: "destructive"
+          });
         }
-        
-        saveError = error;
-        saveAttempts++;
-        console.error(`[SEND] Tentativa ${saveAttempts}/3 falhou:`, error);
-        
-        if (saveAttempts < 3) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * retries));
       }
-      
-      if (saveError && saveAttempts === 3) {
-        throw new Error(`Falha ao salvar mensagem após 3 tentativas: ${saveError.message}`);
-      }
-    } catch (error: any) {
-      console.error('[SEND] Erro ao salvar mensagem:', error);
-      toast({
-        title: "Erro ao salvar",
-        description: "Sua mensagem não foi salva. Tente novamente.",
-        variant: "destructive"
-      });
-      setSyncStatus('error');
-      setIsSending(false);
-      return;
     }
-    
+
+    // Send to AI
     try {
-      const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
-      console.log('[SEND] Chamando edge function:', CHAT_URL);
-      
-      const resp = await fetch(CHAT_URL, {
+      const response = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ 
-          userId: userId,
-          messages: updatedMessages.map(m => ({ 
-            role: m.role, 
-            content: m.content 
-          })) 
+        body: JSON.stringify({
+          messages: messages.map(m => ({ role: m.role, content: m.content })).concat([
+            { role: "user", content: userMessage.content }
+          ]),
+          userId
         }),
       });
 
-      console.log('[SEND] Resposta da edge function:', resp.status, resp.statusText);
-
-      if (resp.status === 429) {
-        throw new Error("RATE_LIMIT");
-      }
-      
-      if (resp.status === 402) {
-        throw new Error("NO_CREDITS");
-      }
-
-      if (!resp.ok || !resp.body) {
-        const errorText = await resp.text();
-        console.error('[SEND] Erro da API:', errorText);
-        throw new Error(`Falha na API: ${resp.status} - ${errorText}`);
+      if (response.status === 429) {
+        toast({
+          title: "Limite excedido",
+          description: "Muitas requisições. Aguarde um momento.",
+          variant: "destructive"
+        });
+        setIsSending(false);
+        return;
       }
 
-      const reader = resp.body.getReader();
+      if (response.status === 402) {
+        toast({
+          title: "Créditos insuficientes",
+          description: "Por favor, adicione créditos.",
+          variant: "destructive"
+        });
+        setIsSending(false);
+        return;
+      }
+
+      if (!response.ok || !response.body) {
+        throw new Error("Stream failed");
+      }
+
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let textBuffer = "";
-      let streamDone = false;
       let assistantContent = "";
+      
+      // Create assistant message placeholder
+      const assistantMessageId = messages.length + 2;
+      setMessages(prev => [...prev, {
+        id: assistantMessageId,
+        role: "assistant",
+        content: ""
+      }]);
 
-      while (!streamDone) {
+      let buffer = "";
+      while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
 
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
+        for (let line of lines) {
+          line = line.trim();
+          if (!line || line.startsWith(":")) continue;
           if (!line.startsWith("data: ")) continue;
 
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") {
-            streamDone = true;
-            break;
-          }
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
 
           try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               assistantContent += content;
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant") {
-                  return prev.map((m, i) => 
-                    i === prev.length - 1 ? { ...m, content: assistantContent } : m
-                  );
-                }
-                return [...prev, { 
-                  id: prev.length + 1, 
-                  role: "assistant", 
-                  content: assistantContent 
-                }];
-              });
+              setMessages(prev => prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, content: assistantContent }
+                  : m
+              ));
             }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
+          } catch (e) {
+            console.error("Parse error:", e);
           }
         }
       }
-      
-      console.log('[SEND] Stream concluído. Conteúdo total:', assistantContent.length, 'caracteres');
-      
-      // Salvar resposta do assistente no banco
-      if (assistantContent && userId) {
-        console.log('[SEND] Salvando resposta do assistente...');
-        const { error: saveError } = await supabase.from('chat_messages').insert({
+
+      // Save assistant message
+      if (assistantContent) {
+        await supabase.from('chat_messages').insert({
           user_id: userId,
+          lesson_id: activeLessonId,
           role: 'assistant',
           content: assistantContent
         });
+
+        // Check for lesson completion
+        const completionPhrases = [
+          "podemos fechar",
+          "aula concluída",
+          "dia concluído",
+          "próxima aula",
+          "vamos para o dia"
+        ];
         
-        if (saveError) {
-          console.error('[SEND] Erro ao salvar resposta:', saveError);
-          toast({
-            title: "Aviso",
-            description: "A resposta foi gerada mas pode não ter sido salva.",
-            variant: "destructive"
-          });
-        } else {
-          console.log('[SEND] Resposta salva com sucesso');
-        }
-        
-        // Verificar se a resposta contém confirmação de conclusão de aula
-        const lessonCompletionMatch = assistantContent.match(/Dia (\d+).*concluído|completamos.*Dia (\d+)/i);
-        if (lessonCompletionMatch) {
-          const lessonDay = parseInt(lessonCompletionMatch[1] || lessonCompletionMatch[2]);
-          console.log('[LESSON] Detectada conclusão do Dia', lessonDay);
-          
-          if (lessonDay >= 1 && lessonDay <= 20) {
-            const { error: progressError } = await supabase
-              .from('lesson_progress')
-              .upsert({
-                user_id: userId,
-                lesson_day: lessonDay,
-                completed: true,
-                completed_at: new Date().toISOString()
-              }, {
-                onConflict: 'user_id,lesson_day'
-              });
-            
-            if (progressError) {
-              console.error('[LESSON] Erro ao salvar progresso:', progressError);
-            } else {
-              console.log('[LESSON] Progresso salvo com sucesso');
+        if (completionPhrases.some(phrase => assistantContent.toLowerCase().includes(phrase))) {
+          const currentLesson = lessons.find(l => l.id === activeLessonId);
+          if (currentLesson) {
+            await supabase
+              .from('lessons')
+              .update({ status: 'completed' })
+              .eq('id', activeLessonId);
+
+            const nextLessonNumber = currentLesson.lesson_number + 1;
+            if (nextLessonNumber <= 20) {
+              // Create or activate next lesson
+              const { data: nextLesson } = await supabase
+                .from('lessons')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('lesson_number', nextLessonNumber)
+                .maybeSingle();
+
+              if (!nextLesson) {
+                const lessonTitles: Record<number, string> = {
+                  2: "Dia 2 - Como o Dinheiro se Move",
+                  3: "Dia 3 - Mercado Futuro Explicado",
+                  4: "Dia 4 - Spot vs Futuro",
+                  5: "Dia 5 - Seu Plano Financeiro",
+                  6: "Dia 6 - A Matemática do Trader",
+                  7: "Dia 7 - Dominando o Vector",
+                  8: "Dia 8 - Os Indicadores que Importam",
+                  9: "Dia 9 - Trabalhando com Ranges",
+                  10: "Dia 10 - Gradiente Linear",
+                  11: "Dia 11 - Nossa Estratégia",
+                  12: "Dia 12 - Conhecendo a Bitget",
+                  13: "Dia 13 - Vector na Prática",
+                  14: "Dia 14 - Seu Maior Inimigo: Você Mesmo",
+                  15: "Dia 15 - Simulando suas Primeiras Operações",
+                  16: "Dia 16 - Hora da Verdade",
+                  17: "Dia 17 - Colocando Dinheiro na Corretora",
+                  18: "Dia 18 - Acompanhamento e Metas",
+                  19: "Dia 19 - Consultoria Permanente",
+                  20: "Dia 20 - Liberdade Financeira",
+                };
+
+                await supabase.from('lessons').insert({
+                  user_id: userId,
+                  lesson_number: nextLessonNumber,
+                  title: lessonTitles[nextLessonNumber] || `Dia ${nextLessonNumber}`,
+                  status: 'active'
+                });
+              } else {
+                await supabase
+                  .from('lessons')
+                  .update({ status: 'active' })
+                  .eq('id', nextLesson.id);
+              }
+
               toast({
-                title: "Aula Concluída! 🎉",
-                description: `Dia ${lessonDay} foi marcado como completo.`,
+                title: "Aula concluída!",
+                description: `Parabéns! Você completou a aula ${currentLesson.lesson_number}.`,
               });
+              
+              await loadLessons(userId);
             }
           }
         }
       }
-      
-      setSyncStatus('idle');
-    } catch (error: any) {
-      console.error("[SEND] Erro ao enviar mensagem:", error);
-      
-      let errorMessage = "Desculpe, ocorreu um erro. Por favor, tente novamente.";
-      let errorTitle = "Erro ao enviar";
-      
-      if (error.message === "RATE_LIMIT") {
-        errorMessage = "Limite de requisições atingido. Por favor, aguarde alguns instantes e tente novamente.";
-        errorTitle = "Limite atingido";
-      } else if (error.message === "NO_CREDITS") {
-        errorMessage = "Créditos da IA esgotados. Por favor, contate o administrador do sistema.";
-        errorTitle = "Sem créditos";
-      }
-      
+    } catch (error) {
+      console.error("Error sending message:", error);
       toast({
-        title: errorTitle,
-        description: errorMessage,
+        title: "Erro",
+        description: "Erro ao enviar mensagem. Tente novamente.",
         variant: "destructive"
       });
-      
-      setMessages(prev => [...prev, {
-        id: prev.length + 1,
-        role: "assistant",
-        content: errorMessage,
-      }]);
-      
-      setSyncStatus('error');
     } finally {
       setIsSending(false);
     }
@@ -386,74 +368,74 @@ const Chat = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen w-full relative flex items-center justify-center">
-        <MatrixRain />
-        <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
-        <div className="relative z-10 text-primary">Carregando...</div>
+      <div className="min-h-screen w-full flex items-center justify-center bg-background">
+        <div className="text-primary animate-pulse">Carregando...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col">
+    <div className="min-h-screen w-full relative flex">
       <MatrixRain />
-      
       <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
       
-      {/* Header */}
-      <div className="relative z-10 bg-card/50 backdrop-blur-lg border-b border-primary/20 p-4">
-        <h1 className="text-xl font-bold text-center bg-gradient-to-r from-primary to-foreground bg-clip-text text-transparent">
-          IA Educacional
-        </h1>
+      {/* Sidebar */}
+      <div className="relative z-10">
+        <ChatSidebar
+          lessons={lessons}
+          activeLessonId={activeLessonId}
+          onSelectLesson={handleSelectLesson}
+        />
       </div>
 
-      {/* Messages Area */}
-      <div className="relative z-10 flex-1 overflow-y-auto p-4 pb-24 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-          >
+      {/* Chat Area */}
+      <div className="flex-1 flex flex-col relative z-10">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          {messages.map((message) => (
             <div
-              className={`max-w-[80%] rounded-2xl p-3 sm:p-4 ${
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "glass-effect text-foreground"
-              }`}
+              key={message.id}
+              className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              <p className="text-sm sm:text-base leading-relaxed">{message.content}</p>
+              {message.role === "assistant" && (
+                <div className="flex-shrink-0">
+                  <img src={jeffAvatar} alt="Jeff Wu" className="w-10 h-10 rounded-full ring-2 ring-primary/30" />
+                </div>
+              )}
+              
+              <div
+                className={`max-w-[70%] rounded-2xl p-4 ${
+                  message.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "glass-effect text-foreground"
+                }`}
+              >
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
 
-      {/* Input Area */}
-      <div className="relative z-10 bg-card/95 backdrop-blur-lg border-t border-primary/20 p-4 pb-20">
-        {/* Status Indicator */}
-        {syncStatus !== 'idle' && (
-          <div className="max-w-4xl mx-auto mb-2 text-xs text-center">
-            {syncStatus === 'syncing' && <span className="text-primary">● Sincronizando...</span>}
-            {syncStatus === 'error' && <span className="text-destructive">● Erro de sincronização</span>}
+        {/* Input */}
+        <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-primary/20">
+          <div className="flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+              placeholder="Digite sua mensagem..."
+              disabled={isSending || !activeLessonId}
+              className="flex-1 bg-background/50"
+            />
+            <Button
+              onClick={handleSend}
+              disabled={isSending || !input.trim() || !activeLessonId}
+              className="px-6"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
-        )}
-        
-        <div className="flex gap-2 max-w-4xl mx-auto">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && !isSending && handleSend()}
-            placeholder={isSending ? "Enviando..." : "Digite sua pergunta..."}
-            disabled={isSending}
-            className="flex-1 bg-input border-primary/20 focus:border-primary/40"
-          />
-          <Button 
-            onClick={handleSend} 
-            size="icon" 
-            className="shrink-0"
-            disabled={isSending || !input.trim()}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
