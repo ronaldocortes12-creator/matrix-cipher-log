@@ -7,7 +7,8 @@ type CryptoCardProps = {
   logo: string;
   price: number;
   trend: "up" | "down";
-  dropProbability: number;
+  probabilityType: "Alta" | "Queda";
+  probability: number;
   minPrice: number;
   maxPrice: number;
   confidence: number;
@@ -19,7 +20,8 @@ export const CryptoCard = ({
   logo,
   price,
   trend,
-  dropProbability,
+  probabilityType,
+  probability,
   minPrice,
   maxPrice,
   confidence,
@@ -63,19 +65,19 @@ export const CryptoCard = ({
         </div>
       </div>
 
-      {/* Drop Probability */}
+      {/* Probability */}
       <div className="mb-4">
         <div className="flex items-center justify-between text-sm mb-1">
-          <span className="text-muted-foreground">Probabilidade de Queda</span>
+          <span className="text-muted-foreground">Probabilidade de {probabilityType}</span>
           <span
             className={cn(
               "font-semibold px-2 py-0.5 rounded",
-              dropProbability > 50
-                ? "bg-red-500/20 text-red-400"
-                : "bg-green-500/20 text-green-400"
+              probabilityType === "Alta"
+                ? "bg-green-500/20 text-green-400"
+                : "bg-red-500/20 text-red-400"
             )}
           >
-            {dropProbability.toFixed(1)}%
+            {probability.toFixed(1)}%
           </span>
         </div>
       </div>
@@ -83,7 +85,7 @@ export const CryptoCard = ({
       {/* Price Range */}
       <div className="space-y-2 pt-3 border-t border-primary/10">
         <div className="text-xs text-muted-foreground font-medium mb-2">
-          Range de Preço (3 anos)
+          Range de Preço (IC 95%)
         </div>
         <div className="flex justify-between text-sm">
           <div>

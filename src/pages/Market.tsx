@@ -10,7 +10,8 @@ type Crypto = {
   logo: string;
   price: number;
   trend: "up" | "down";
-  dropProbability: number;
+  probabilityType: "Alta" | "Queda";
+  probability: number;
   minPrice: number;
   maxPrice: number;
   confidence: number;
@@ -61,11 +62,11 @@ const Market = () => {
       
       const priceData = await response.json();
 
-      // Fetch historical data for statistical analysis (last 365 days)
+      // Fetch historical data for statistical analysis (365 days due to API limits)
       const historicalPromises = cryptoList.map(async (crypto) => {
         try {
           const histResponse = await fetch(
-            `https://api.coingecko.com/api/v3/coins/${crypto.id}/market_chart?vs_currency=usd&days=1095&interval=daily`
+            `https://api.coingecko.com/api/v3/coins/${crypto.id}/market_chart?vs_currency=usd&days=365&interval=daily`
           );
           const histData = await histResponse.json();
           return { id: crypto.id, prices: histData.prices || [] };
@@ -77,8 +78,11 @@ const Market = () => {
 
       const historicalData = await Promise.all(historicalPromises);
       const historicalMap = Object.fromEntries(
-        historicalData.map(h => [h.id, h.prices.map((p: any) => p[1])])
+        historicalData.map(h => [h.id, h.prices])
       );
+
+      // Calculate BTC flow component (for 40% weight)
+      const btcFlowComponent = calculateBTCFlowComponent(historicalMap['bitcoin'] || []);
 
       const cryptosWithData: Crypto[] = cryptoList.map(crypto => {
         const data = priceData[crypto.id];
@@ -88,54 +92,76 @@ const Market = () => {
         const trend: "up" | "down" = change24h >= 0 ? "up" : "down";
         
         // Statistical calculation using historical data
-        const historicalPrices = historicalMap[crypto.id] || [];
+        const historicalPricesData = historicalMap[crypto.id] || [];
         
-        let mean = price;
-        let stdDev = price * 0.20; // fallback
         let minPrice = price * 0.70;
         let maxPrice = price * 1.30;
-        let dropProbability = 50.0;
+        let pAltaPreco = 0.5;
+        let pQuedaPreco = 0.5;
 
-        if (historicalPrices.length > 0) {
-          // Calculate mean
-          mean = historicalPrices.reduce((sum: number, p: number) => sum + p, 0) / historicalPrices.length;
+        if (historicalPricesData.length > 30) {
+          const prices = historicalPricesData.map((p: any) => p[1]);
           
-          // Calculate standard deviation
-          const variance = historicalPrices.reduce((sum: number, p: number) => 
-            sum + Math.pow(p - mean, 2), 0) / historicalPrices.length;
-          stdDev = Math.sqrt(variance);
-          
-          // 95% confidence interval: mean ± 2 * stdDev
-          minPrice = Math.max(0, mean - 2 * stdDev);
-          maxPrice = mean + 2 * stdDev;
-          
-          // Calculate drop probability based on statistical position
-          // Using the 95% confidence interval (mean ± 2σ)
-          const upperBound = mean + 2 * stdDev;
-          const lowerBound = mean - 2 * stdDev;
-          
-          if (price >= upperBound) {
-            // Price at or above upper bound = 95% drop probability
-            dropProbability = 95;
-          } else if (price <= lowerBound) {
-            // Price at or below lower bound = 5% drop probability  
-            dropProbability = 5;
-          } else {
-            // Linear interpolation between bounds
-            const range = upperBound - lowerBound;
-            const positionInRange = (price - lowerBound) / range;
-            // Map position (0 to 1) to probability (5% to 95%)
-            dropProbability = 5 + (positionInRange * 90);
+          // Calculate log returns
+          const returns: number[] = [];
+          for (let i = 1; i < prices.length; i++) {
+            const logReturn = Math.log(prices[i]) - Math.log(prices[i - 1]);
+            if (isFinite(logReturn)) {
+              returns.push(logReturn);
+            }
+          }
+
+          if (returns.length > 0) {
+            // Calculate mean and std dev
+            const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+            const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+            const stdDev = Math.sqrt(variance);
+
+            // Confidence interval 95%
+            const ic95Lower = mean - 1.96 * stdDev;
+            const ic95Upper = mean + 1.96 * stdDev;
+            
+            // Convert back to price range
+            minPrice = Math.max(0, price * Math.exp(ic95Lower * 30)); // ~1 month projection
+            maxPrice = price * Math.exp(ic95Upper * 30);
+
+            // Probability of drop using Normal CDF
+            const epsilon = 1e-8;
+            const zScore = (0 - mean) / (stdDev + epsilon);
+            pQuedaPreco = normalCDF(zScore);
+            pAltaPreco = 1 - pQuedaPreco;
           }
         }
+
+        // Combine with BTC flow component (60% price + 40% BTC flow)
+        let pAltaFluxo = 0.5;
+        let pQuedaFluxo = 0.5;
         
+        if (crypto.id === 'bitcoin') {
+          // For BTC itself, use neutral flow component
+          pAltaFluxo = 0.5;
+          pQuedaFluxo = 0.5;
+        } else {
+          pAltaFluxo = btcFlowComponent.pAlta;
+          pQuedaFluxo = btcFlowComponent.pQueda;
+        }
+
+        // Final weighted probability
+        const pAltaFinal = 0.60 * pAltaPreco + 0.40 * pAltaFluxo;
+        const pQuedaFinal = 1 - pAltaFinal;
+
+        // Determine label and probability
+        const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
+        const probability = pAltaFinal >= 0.5 ? pAltaFinal * 100 : pQuedaFinal * 100;
+
         return {
           name: crypto.name,
           symbol: crypto.symbol,
           logo: crypto.logo,
           price,
-          trend,
-          dropProbability: Number(dropProbability.toFixed(1)),
+          trend: probabilityType === "Alta" ? "up" : "down",
+          probabilityType,
+          probability: Number(probability.toFixed(1)),
           minPrice,
           maxPrice,
           confidence: 95,
@@ -158,31 +184,51 @@ const Market = () => {
     }
   };
 
-  const getVolatilityFactor = (symbol: string): number => {
-    // Historical volatility factors (simplified)
-    const volatilityMap: Record<string, number> = {
-      'BTC': 0.15,
-      'ETH': 0.20,
-      'BNB': 0.25,
-      'SOL': 0.35,
-      'XRP': 0.30,
-      'ADA': 0.30,
-      'AVAX': 0.40,
-      'DOGE': 0.45,
-      'DOT': 0.35,
-      'LINK': 0.35,
-      'MATIC': 0.40,
-      'UNI': 0.40,
-      'LTC': 0.25,
-      'XLM': 0.35,
-      'WLD': 0.50,
-      'PEPE': 0.60,
-      'NEAR': 0.40,
-      'GRT': 0.45,
-      'ATOM': 0.35,
-      'FIL': 0.40,
+  // Normal CDF approximation
+  const normalCDF = (z: number): number => {
+    const t = 1 / (1 + 0.2316419 * Math.abs(z));
+    const d = 0.3989423 * Math.exp(-z * z / 2);
+    const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    return z > 0 ? 1 - prob : prob;
+  };
+
+  // Calculate BTC flow component (40% weight)
+  const calculateBTCFlowComponent = (btcHistoricalData: any[]): { pAlta: number; pQueda: number } => {
+    if (btcHistoricalData.length < 30) {
+      return { pAlta: 0.5, pQueda: 0.5 };
+    }
+
+    const prices = btcHistoricalData.map((p: any) => p[1]);
+    
+    // Calculate daily price changes as proxy for "net flows"
+    const flows: number[] = [];
+    for (let i = 1; i < prices.length; i++) {
+      const flow = prices[i] - prices[i - 1];
+      flows.push(flow);
+    }
+
+    // Recent window (last 3 days)
+    const k = 3;
+    const recentFlows = flows.slice(-k);
+    const nfRecent = recentFlows.reduce((sum, f) => sum + f, 0);
+
+    // Calculate mean and std dev of all flows
+    const meanNF = flows.reduce((sum, f) => sum + f, 0) / flows.length;
+    const varianceNF = flows.reduce((sum, f) => sum + Math.pow(f - meanNF, 2), 0) / flows.length;
+    const stdDevNF = Math.sqrt(varianceNF);
+
+    // Z-score of magnitude (absolute value)
+    const epsilon = 1e-8;
+    const zAbs = Math.abs(nfRecent - meanNF) / (stdDevNF + epsilon);
+
+    // Compress to [0,1] using logistic function
+    const m = 1 / (1 + Math.exp(-zAbs));
+
+    // High flow (in or out) → higher probability of Alta
+    return {
+      pAlta: m,
+      pQueda: 1 - m
     };
-    return volatilityMap[symbol] || 0.35;
   };
 
   const loadMockData = () => {
@@ -193,7 +239,8 @@ const Market = () => {
         logo: "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
         price: 43250.0,
         trend: "up",
-        dropProbability: 35.2,
+        probabilityType: "Alta",
+        probability: 64.8,
         minPrice: 36712.5,
         maxPrice: 49787.5,
         confidence: 95,
@@ -204,7 +251,8 @@ const Market = () => {
         logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
         price: 2340.5,
         trend: "down",
-        dropProbability: 52.1,
+        probabilityType: "Queda",
+        probability: 52.1,
         minPrice: 1872.4,
         maxPrice: 2808.6,
         confidence: 95,
@@ -224,7 +272,7 @@ const Market = () => {
           Mercado Cripto
         </h1>
         <p className="text-xs text-center text-muted-foreground mt-1">
-          Análise estatística baseada em 3 anos de dados
+          Análise estatística baseada em dados históricos (365 dias)
         </p>
       </div>
 
