@@ -68,6 +68,29 @@ const Chat = () => {
   };
 
   const loadLessons = async (uid: string) => {
+    const lessonTitles: Record<number, string> = {
+      1: "Dia 1 - Introdução ao Mundo Cripto",
+      2: "Dia 2 - Como o Dinheiro se Move",
+      3: "Dia 3 - Mercado Futuro Explicado",
+      4: "Dia 4 - Spot vs Futuro",
+      5: "Dia 5 - Seu Plano Financeiro",
+      6: "Dia 6 - A Matemática do Trader",
+      7: "Dia 7 - Dominando o Vector",
+      8: "Dia 8 - Os Indicadores que Importam",
+      9: "Dia 9 - Trabalhando com Ranges",
+      10: "Dia 10 - Gradiente Linear",
+      11: "Dia 11 - Nossa Estratégia",
+      12: "Dia 12 - Conhecendo a Bitget",
+      13: "Dia 13 - Vector na Prática",
+      14: "Dia 14 - Seu Maior Inimigo: Você Mesmo",
+      15: "Dia 15 - Simulando suas Primeiras Operações",
+      16: "Dia 16 - Hora da Verdade",
+      17: "Dia 17 - Colocando Dinheiro na Corretora",
+      18: "Dia 18 - Acompanhamento e Metas",
+      19: "Dia 19 - Consultoria Permanente",
+      20: "Dia 20 - Liberdade Financeira",
+    };
+
     const { data, error } = await supabase
       .from('lessons')
       .select('*')
@@ -79,40 +102,63 @@ const Chat = () => {
       return;
     }
 
+    // Se já existem lições, verificar se são todas as 20
     if (data && data.length > 0) {
-      setLessons(data.map(l => ({
-        id: l.id,
-        lesson_number: l.lesson_number,
-        title: l.title,
-        status: l.status as 'pending' | 'active' | 'completed'
-      })));
-      const activeLesson = data.find(l => l.status === 'active') || data[0];
-      setActiveLessonId(activeLesson.id);
-    } else {
-      // Create all 20 lessons at once, only first one active
-      const lessonTitles: Record<number, string> = {
-        1: "Dia 1 - Introdução ao Mundo Cripto",
-        2: "Dia 2 - Como o Dinheiro se Move",
-        3: "Dia 3 - Mercado Futuro Explicado",
-        4: "Dia 4 - Spot vs Futuro",
-        5: "Dia 5 - Seu Plano Financeiro",
-        6: "Dia 6 - A Matemática do Trader",
-        7: "Dia 7 - Dominando o Vector",
-        8: "Dia 8 - Os Indicadores que Importam",
-        9: "Dia 9 - Trabalhando com Ranges",
-        10: "Dia 10 - Gradiente Linear",
-        11: "Dia 11 - Nossa Estratégia",
-        12: "Dia 12 - Conhecendo a Bitget",
-        13: "Dia 13 - Vector na Prática",
-        14: "Dia 14 - Seu Maior Inimigo: Você Mesmo",
-        15: "Dia 15 - Simulando suas Primeiras Operações",
-        16: "Dia 16 - Hora da Verdade",
-        17: "Dia 17 - Colocando Dinheiro na Corretora",
-        18: "Dia 18 - Acompanhamento e Metas",
-        19: "Dia 19 - Consultoria Permanente",
-        20: "Dia 20 - Liberdade Financeira",
-      };
+      const existingNumbers = data.map(l => l.lesson_number);
+      const missingLessons = [];
+      
+      // Criar as lições que faltam
+      for (let i = 1; i <= 20; i++) {
+        if (!existingNumbers.includes(i)) {
+          missingLessons.push({
+            user_id: uid,
+            lesson_number: i,
+            title: lessonTitles[i],
+            status: 'pending'
+          });
+        }
+      }
 
+      // Inserir lições faltantes
+      if (missingLessons.length > 0) {
+        const { error: createError } = await supabase
+          .from('lessons')
+          .insert(missingLessons);
+
+        if (createError) {
+          console.error('Error creating missing lessons:', createError);
+        }
+
+        // Recarregar todas as lições
+        const { data: allLessons } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('user_id', uid)
+          .order('lesson_number', { ascending: true });
+
+        if (allLessons) {
+          setLessons(allLessons.map(l => ({
+            id: l.id,
+            lesson_number: l.lesson_number,
+            title: l.title,
+            status: l.status as 'pending' | 'active' | 'completed'
+          })));
+          const activeLesson = allLessons.find(l => l.status === 'active') || allLessons[0];
+          setActiveLessonId(activeLesson.id);
+        }
+      } else {
+        // Todas as 20 já existem
+        setLessons(data.map(l => ({
+          id: l.id,
+          lesson_number: l.lesson_number,
+          title: l.title,
+          status: l.status as 'pending' | 'active' | 'completed'
+        })));
+        const activeLesson = data.find(l => l.status === 'active') || data[0];
+        setActiveLessonId(activeLesson.id);
+      }
+    } else {
+      // Não existe nenhuma lição, criar todas as 20
       const lessonsToCreate = Array.from({ length: 20 }, (_, i) => ({
         user_id: uid,
         lesson_number: i + 1,
@@ -120,8 +166,6 @@ const Chat = () => {
         status: i === 0 ? 'active' : 'pending'
       }));
 
-      console.log('Creating lessons:', lessonsToCreate);
-      
       const { data: newLessons, error: createError } = await supabase
         .from('lessons')
         .insert(lessonsToCreate)
@@ -133,7 +177,6 @@ const Chat = () => {
       }
 
       if (newLessons && newLessons.length > 0) {
-        console.log('Lessons created successfully:', newLessons);
         setLessons(newLessons.map(l => ({
           id: l.id,
           lesson_number: l.lesson_number,
@@ -141,8 +184,6 @@ const Chat = () => {
           status: l.status as 'pending' | 'active' | 'completed'
         })));
         setActiveLessonId(newLessons[0].id);
-      } else {
-        console.error('No lessons were created');
       }
     }
   };
