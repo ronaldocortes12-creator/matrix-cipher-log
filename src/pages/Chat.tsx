@@ -89,31 +89,55 @@ const Chat = () => {
       const activeLesson = data.find(l => l.status === 'active') || data[0];
       setActiveLessonId(activeLesson.id);
     } else {
-      // Create first lesson if none exists
-      const { data: newLesson, error: createError } = await supabase
+      // Create all 20 lessons at once, only first one active
+      const lessonTitles: Record<number, string> = {
+        1: "Dia 1 - Introdução ao Mundo Cripto",
+        2: "Dia 2 - Como o Dinheiro se Move",
+        3: "Dia 3 - Mercado Futuro Explicado",
+        4: "Dia 4 - Spot vs Futuro",
+        5: "Dia 5 - Seu Plano Financeiro",
+        6: "Dia 6 - A Matemática do Trader",
+        7: "Dia 7 - Dominando o Vector",
+        8: "Dia 8 - Os Indicadores que Importam",
+        9: "Dia 9 - Trabalhando com Ranges",
+        10: "Dia 10 - Gradiente Linear",
+        11: "Dia 11 - Nossa Estratégia",
+        12: "Dia 12 - Conhecendo a Bitget",
+        13: "Dia 13 - Vector na Prática",
+        14: "Dia 14 - Seu Maior Inimigo: Você Mesmo",
+        15: "Dia 15 - Simulando suas Primeiras Operações",
+        16: "Dia 16 - Hora da Verdade",
+        17: "Dia 17 - Colocando Dinheiro na Corretora",
+        18: "Dia 18 - Acompanhamento e Metas",
+        19: "Dia 19 - Consultoria Permanente",
+        20: "Dia 20 - Liberdade Financeira",
+      };
+
+      const lessonsToCreate = Array.from({ length: 20 }, (_, i) => ({
+        user_id: uid,
+        lesson_number: i + 1,
+        title: lessonTitles[i + 1],
+        status: i === 0 ? 'active' : 'pending'
+      }));
+
+      const { data: newLessons, error: createError } = await supabase
         .from('lessons')
-        .insert({
-          user_id: uid,
-          lesson_number: 1,
-          title: 'Dia 1 - Introdução ao Mundo Cripto',
-          status: 'active'
-        })
-        .select()
-        .single();
+        .insert(lessonsToCreate)
+        .select();
 
       if (createError) {
-        console.error('Error creating first lesson:', createError);
+        console.error('Error creating lessons:', createError);
         return;
       }
 
-      if (newLesson) {
-        setLessons([{
-          id: newLesson.id,
-          lesson_number: newLesson.lesson_number,
-          title: newLesson.title,
-          status: newLesson.status as 'pending' | 'active' | 'completed'
-        }]);
-        setActiveLessonId(newLesson.id);
+      if (newLessons) {
+        setLessons(newLessons.map(l => ({
+          id: l.id,
+          lesson_number: l.lesson_number,
+          title: l.title,
+          status: l.status as 'pending' | 'active' | 'completed'
+        })));
+        setActiveLessonId(newLessons[0].id);
       }
     }
   };
@@ -314,7 +338,11 @@ const Chat = () => {
           "aula concluída",
           "dia concluído",
           "próxima aula",
-          "vamos para o dia"
+          "vamos para o dia",
+          "vamos para o próximo dia",
+          "próximo dia",
+          "dia 2",
+          "dia dois"
         ];
         
         if (completionPhrases.some(phrase => assistantContent.toLowerCase().includes(phrase))) {
@@ -327,49 +355,12 @@ const Chat = () => {
 
             const nextLessonNumber = currentLesson.lesson_number + 1;
             if (nextLessonNumber <= 20) {
-              // Create or activate next lesson
-              const { data: nextLesson } = await supabase
+              // Activate next lesson (it should already exist)
+              await supabase
                 .from('lessons')
-                .select('*')
+                .update({ status: 'active' })
                 .eq('user_id', userId)
-                .eq('lesson_number', nextLessonNumber)
-                .maybeSingle();
-
-              if (!nextLesson) {
-                const lessonTitles: Record<number, string> = {
-                  2: "Dia 2 - Como o Dinheiro se Move",
-                  3: "Dia 3 - Mercado Futuro Explicado",
-                  4: "Dia 4 - Spot vs Futuro",
-                  5: "Dia 5 - Seu Plano Financeiro",
-                  6: "Dia 6 - A Matemática do Trader",
-                  7: "Dia 7 - Dominando o Vector",
-                  8: "Dia 8 - Os Indicadores que Importam",
-                  9: "Dia 9 - Trabalhando com Ranges",
-                  10: "Dia 10 - Gradiente Linear",
-                  11: "Dia 11 - Nossa Estratégia",
-                  12: "Dia 12 - Conhecendo a Bitget",
-                  13: "Dia 13 - Vector na Prática",
-                  14: "Dia 14 - Seu Maior Inimigo: Você Mesmo",
-                  15: "Dia 15 - Simulando suas Primeiras Operações",
-                  16: "Dia 16 - Hora da Verdade",
-                  17: "Dia 17 - Colocando Dinheiro na Corretora",
-                  18: "Dia 18 - Acompanhamento e Metas",
-                  19: "Dia 19 - Consultoria Permanente",
-                  20: "Dia 20 - Liberdade Financeira",
-                };
-
-                await supabase.from('lessons').insert({
-                  user_id: userId,
-                  lesson_number: nextLessonNumber,
-                  title: lessonTitles[nextLessonNumber] || `Dia ${nextLessonNumber}`,
-                  status: 'active'
-                });
-              } else {
-                await supabase
-                  .from('lessons')
-                  .update({ status: 'active' })
-                  .eq('id', nextLesson.id);
-              }
+                .eq('lesson_number', nextLessonNumber);
 
               toast({
                 title: "Aula concluída!",
@@ -437,7 +428,12 @@ const Chat = () => {
                     : "glass-effect text-foreground"
                 }`}
               >
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                <p 
+                  className="whitespace-pre-wrap text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                  }}
+                />
               </div>
             </div>
           ))}

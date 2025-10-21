@@ -109,15 +109,23 @@ const Market = () => {
           minPrice = Math.max(0, mean - 2 * stdDev);
           maxPrice = mean + 2 * stdDev;
           
-          // Calculate drop probability based on position in the range
-          // If price is near maxPrice (upper bound), higher drop probability
-          // If price is near minPrice (lower bound), lower drop probability
-          const range = maxPrice - minPrice;
-          if (range > 0) {
-            const pricePosition = (price - minPrice) / range; // 0 to 1
-            // Position of 1 (at max) = 80% drop probability
-            // Position of 0 (at min) = 20% drop probability
-            dropProbability = 20 + (pricePosition * 60);
+          // Calculate drop probability based on statistical position
+          // Using the 95% confidence interval (mean ± 2σ)
+          const upperBound = mean + 2 * stdDev;
+          const lowerBound = mean - 2 * stdDev;
+          
+          if (price >= upperBound) {
+            // Price at or above upper bound = 95% drop probability
+            dropProbability = 95;
+          } else if (price <= lowerBound) {
+            // Price at or below lower bound = 5% drop probability  
+            dropProbability = 5;
+          } else {
+            // Linear interpolation between bounds
+            const range = upperBound - lowerBound;
+            const positionInRange = (price - lowerBound) / range;
+            // Map position (0 to 1) to probability (5% to 95%)
+            dropProbability = 5 + (positionInRange * 90);
           }
         }
         
