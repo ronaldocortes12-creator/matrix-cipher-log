@@ -120,6 +120,8 @@ const Chat = () => {
         status: i === 0 ? 'active' : 'pending'
       }));
 
+      console.log('Creating lessons:', lessonsToCreate);
+      
       const { data: newLessons, error: createError } = await supabase
         .from('lessons')
         .insert(lessonsToCreate)
@@ -130,7 +132,8 @@ const Chat = () => {
         return;
       }
 
-      if (newLessons) {
+      if (newLessons && newLessons.length > 0) {
+        console.log('Lessons created successfully:', newLessons);
         setLessons(newLessons.map(l => ({
           id: l.id,
           lesson_number: l.lesson_number,
@@ -138,6 +141,8 @@ const Chat = () => {
           status: l.status as 'pending' | 'active' | 'completed'
         })));
         setActiveLessonId(newLessons[0].id);
+      } else {
+        console.error('No lessons were created');
       }
     }
   };
