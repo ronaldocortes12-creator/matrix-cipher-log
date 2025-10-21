@@ -454,7 +454,7 @@ const Chat = () => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col relative z-10 overflow-hidden">
+      <div className="flex-1 flex flex-col relative z-10">
         {/* Messages */}
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
