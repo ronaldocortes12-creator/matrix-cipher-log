@@ -88,6 +88,33 @@ const Chat = () => {
       })));
       const activeLesson = data.find(l => l.status === 'active') || data[0];
       setActiveLessonId(activeLesson.id);
+    } else {
+      // Create first lesson if none exists
+      const { data: newLesson, error: createError } = await supabase
+        .from('lessons')
+        .insert({
+          user_id: uid,
+          lesson_number: 1,
+          title: 'Dia 1 - Introdução ao Mundo Cripto',
+          status: 'active'
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating first lesson:', createError);
+        return;
+      }
+
+      if (newLesson) {
+        setLessons([{
+          id: newLesson.id,
+          lesson_number: newLesson.lesson_number,
+          title: newLesson.title,
+          status: newLesson.status as 'pending' | 'active' | 'completed'
+        }]);
+        setActiveLessonId(newLesson.id);
+      }
     }
   };
 

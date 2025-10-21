@@ -61,27 +61,65 @@ const Market = () => {
       
       const priceData = await response.json();
 
-      // Calculate drop probability based on statistical analysis
-      // In a real implementation, this would use 3 years of historical data
-      // For now, using simplified calculation based on 24h change and volatility patterns
+      // Fetch historical data for statistical analysis (last 365 days)
+      const historicalPromises = cryptoList.map(async (crypto) => {
+        try {
+          const histResponse = await fetch(
+            `https://api.coingecko.com/api/v3/coins/${crypto.id}/market_chart?vs_currency=usd&days=1095&interval=daily`
+          );
+          const histData = await histResponse.json();
+          return { id: crypto.id, prices: histData.prices || [] };
+        } catch (error) {
+          console.error(`Error fetching historical data for ${crypto.id}:`, error);
+          return { id: crypto.id, prices: [] };
+        }
+      });
+
+      const historicalData = await Promise.all(historicalPromises);
+      const historicalMap = Object.fromEntries(
+        historicalData.map(h => [h.id, h.prices.map((p: any) => p[1])])
+      );
+
       const cryptosWithData: Crypto[] = cryptoList.map(crypto => {
         const data = priceData[crypto.id];
         const price = data?.usd || 0;
         const change24h = data?.usd_24h_change || 0;
         
-        // Simplified drop probability calculation
-        // In real implementation: would use historical std deviation and normal distribution
         const trend: "up" | "down" = change24h >= 0 ? "up" : "down";
         
-        // Mock statistical ranges (would be calculated from 3-year historical data)
-        const volatilityFactor = getVolatilityFactor(crypto.symbol);
-        const minPrice = price * (1 - volatilityFactor);
-        const maxPrice = price * (1 + volatilityFactor);
+        // Statistical calculation using historical data
+        const historicalPrices = historicalMap[crypto.id] || [];
         
-        // Drop probability based on current price position in range
-        // Higher when price is near upper bound
-        const pricePosition = (price - minPrice) / (maxPrice - minPrice);
-        const dropProbability = pricePosition * 60 + 20; // Range: 20-80%
+        let mean = price;
+        let stdDev = price * 0.20; // fallback
+        let minPrice = price * 0.70;
+        let maxPrice = price * 1.30;
+        let dropProbability = 50.0;
+
+        if (historicalPrices.length > 0) {
+          // Calculate mean
+          mean = historicalPrices.reduce((sum: number, p: number) => sum + p, 0) / historicalPrices.length;
+          
+          // Calculate standard deviation
+          const variance = historicalPrices.reduce((sum: number, p: number) => 
+            sum + Math.pow(p - mean, 2), 0) / historicalPrices.length;
+          stdDev = Math.sqrt(variance);
+          
+          // 95% confidence interval: mean ± 2 * stdDev
+          minPrice = Math.max(0, mean - 2 * stdDev);
+          maxPrice = mean + 2 * stdDev;
+          
+          // Calculate drop probability based on position in the range
+          // If price is near maxPrice (upper bound), higher drop probability
+          // If price is near minPrice (lower bound), lower drop probability
+          const range = maxPrice - minPrice;
+          if (range > 0) {
+            const pricePosition = (price - minPrice) / range; // 0 to 1
+            // Position of 1 (at max) = 80% drop probability
+            // Position of 0 (at min) = 20% drop probability
+            dropProbability = 20 + (pricePosition * 60);
+          }
+        }
         
         return {
           name: crypto.name,
@@ -92,7 +130,7 @@ const Market = () => {
           dropProbability: Number(dropProbability.toFixed(1)),
           minPrice,
           maxPrice,
-          confidence: 95, // Based on 3-year statistical confidence interval
+          confidence: 95,
         };
       });
 

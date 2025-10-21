@@ -54,7 +54,12 @@ export const CryptoCard = ({
       {/* Price */}
       <div className="mb-4">
         <div className="text-2xl font-bold text-primary">
-          ${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          ${price < 0.01 
+            ? price.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
+            : price < 1
+            ? price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+            : price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          }
         </div>
       </div>
 
@@ -84,13 +89,23 @@ export const CryptoCard = ({
           <div>
             <div className="text-muted-foreground text-xs">Mínimo</div>
             <div className="font-semibold text-foreground">
-              ${minPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${minPrice < 0.01 
+                ? minPrice.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
+                : minPrice < 1
+                ? minPrice.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+                : minPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              }
             </div>
           </div>
           <div className="text-right">
             <div className="text-muted-foreground text-xs">Máximo</div>
             <div className="font-semibold text-foreground">
-              ${maxPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${maxPrice < 0.01 
+                ? maxPrice.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
+                : maxPrice < 1
+                ? maxPrice.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+                : maxPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              }
             </div>
           </div>
         </div>
