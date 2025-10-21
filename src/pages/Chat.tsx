@@ -8,6 +8,7 @@ import { ChatSidebar } from "@/components/ChatSidebar";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import jeffAvatar from "@/assets/jeff-wu-avatar.png";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Message = {
   id: number;
@@ -455,36 +456,38 @@ const Chat = () => {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col relative z-10">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              {message.role === "assistant" && (
-                <div className="flex-shrink-0">
-                  <img src={jeffAvatar} alt="Jeff Wu" className="w-10 h-10 rounded-full ring-2 ring-primary/30" />
-                </div>
-              )}
-              
+        <ScrollArea className="flex-1" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          <div className="p-4 space-y-4">
+            {messages.map((message) => (
               <div
-                className={`max-w-[70%] rounded-2xl p-4 ${
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "glass-effect text-foreground"
-                }`}
+                key={message.id}
+                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                <p 
-                  className="whitespace-pre-wrap text-sm leading-relaxed"
-                  dangerouslySetInnerHTML={{
-                    __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                  }}
-                />
+                {message.role === "assistant" && (
+                  <div className="flex-shrink-0">
+                    <img src={jeffAvatar} alt="Jeff Wu" className="w-10 h-10 rounded-full ring-2 ring-primary/30" />
+                  </div>
+                )}
+                
+                <div
+                  className={`max-w-[70%] rounded-2xl p-4 ${
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "glass-effect text-foreground"
+                  }`}
+                >
+                  <p 
+                    className="whitespace-pre-wrap text-sm leading-relaxed"
+                    dangerouslySetInnerHTML={{
+                      __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+        </ScrollArea>
 
         {/* Input */}
         <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-primary/20">
