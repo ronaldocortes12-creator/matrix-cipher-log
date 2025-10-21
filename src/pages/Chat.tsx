@@ -440,7 +440,7 @@ const Chat = () => {
   }
 
   return (
-    <div className="min-h-screen w-full relative flex">
+    <div className="h-screen w-full relative flex overflow-hidden">
       <MatrixRain />
       <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
       
@@ -454,9 +454,9 @@ const Chat = () => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col relative z-10">
+      <div className="flex-1 flex flex-col relative z-10 overflow-hidden">
         {/* Messages */}
-        <ScrollArea className="flex-1" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+        <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             {messages.map((message) => (
               <div

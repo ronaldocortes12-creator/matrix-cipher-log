@@ -21,7 +21,7 @@ export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson }: ChatSid
   const navigate = useNavigate();
 
   return (
-    <div className="w-80 h-full bg-card/50 backdrop-blur-xl border-r border-primary/20 flex flex-col">
+    <div className="w-80 h-full overflow-hidden bg-card/50 backdrop-blur-xl border-r border-primary/20 flex flex-col">
       {/* User Header */}
       <UserHeader />
 
