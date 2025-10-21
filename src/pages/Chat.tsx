@@ -490,7 +490,7 @@ const Chat = () => {
         </ScrollArea>
 
         {/* Input */}
-        <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-primary/20">
+        <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-primary/20 mb-16">
           <div className="flex gap-2">
             <Input
               value={input}
