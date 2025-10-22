@@ -24,8 +24,8 @@ Deno.serve(async (req) => {
     )
 
     const users = [
-      { email: 'gcortes.lfelipe@gmail.com', password: '1234' },
-      { email: 'cortesneto.rona@gmail.com', password: '1234' }
+      { email: 'gcortes.lfelipe@gmail.com', password: '123456' },
+      { email: 'cortesneto.rona@gmail.com', password: '123456' }
     ]
 
     const results = []
