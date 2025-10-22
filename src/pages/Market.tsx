@@ -304,42 +304,47 @@ const Market = () => {
       console.assert(stdPPrice > 0.01, 'LOW_VARIANCE_P_PRICE_UP', { stdPPrice });
 
       // Detect cluster (±1.5%) on initial combine
-      const combine = (wPrice: number, wFlow: number, sigmaFactor = 1) => {
+      const combine = (wPrice: number, wFlow: number, stretch = 1, alpha = 1.0) => {
         return stats.map(s => {
-          // Recompute p_price_up from mu/sigma with optional sigma stretch
-          const sigmaEff = Math.max(s.sigma * sigmaFactor, 1e-8);
-          const p_price_raw = s.sigma < 1e-8 ? 0.5 : (1 - normalCDF((0 - s.mu) / sigmaEff));
-          // Apply volatility-based contrast so more volatile assets deviate more from 0.5
-          const factor = medianSigma > 0 ? Math.min(1.6, Math.max(0.8, s.sigma / medianSigma)) : 1;
-          const p_price_up = Math.max(0.001, Math.min(0.999, 0.5 + (p_price_raw - 0.5) * factor));
-          return ({ id: s.id, p: wPrice * p_price_up + wFlow * s.p_flow_up, p_price_up });
+          const ratio = medianSigma > 0 ? (s.sigma / medianSigma) : 1;
+          const clampedRatio = Math.min(2.5, Math.max(0.5, ratio));
+          const boost = Math.pow(clampedRatio, alpha);
+          const sigmaEff = Math.max((s.sigma * stretch) / boost, 1e-8);
+          const p_price_up = s.sigma < 1e-8 ? 0.5 : (1 - normalCDF((0 - s.mu) / sigmaEff));
+          const p = wPrice * Math.min(0.999, Math.max(0.001, p_price_up)) + wFlow * s.p_flow_up;
+          return ({ id: s.id, p, p_price_up });
         });
       };
 
-      let combined = combine(0.60, 0.40);
-      
+      // Iterative strategy to enforce >=5pp dispersion without violating rules
+      const strategies = [
+        { wP: 0.60, wF: 0.40, stretch: 1.0, alpha: 1.2, label: 'BASE_60/40_a1.2' },
+        { wP: 0.75, wF: 0.25, stretch: 1.0, alpha: 1.5, label: 'REWEIGHT_75/25_a1.5' },
+        { wP: 0.75, wF: 0.25, stretch: 0.9, alpha: 1.8, label: 'STRETCH_0.9_a1.8' },
+        { wP: 0.80, wF: 0.20, stretch: 0.8, alpha: 2.0, label: 'STRETCH_0.8_a2.0' },
+      ];
+
       const getDispersion = (arr: Array<{id:string,p:number}>) => {
         if (!arr.length) return 0;
         const ps = arr.map(a => a.p);
         return Math.max(...ps) - Math.min(...ps);
       };
 
-      // Enforce diversity: if max-min < 5pp, recalibrate weights to 75/25 and then stretch sigma
+      let combined = combine(strategies[0].wP, strategies[0].wF, strategies[0].stretch, strategies[0].alpha);
       let dispersion = getDispersion(combined);
-      if (dispersion < 0.05) {
-        console.warn('DIVERSITY_LOW_5PP -> recalibrate weights to 0.75/0.25');
-        combined = combine(0.75, 0.25);
+
+      for (let i = 1; i < strategies.length && dispersion < 0.05; i++) {
+        const st = strategies[i];
+        console.warn(`DIVERSITY_LOW_5PP -> applying ${st.label}`);
+        combined = combine(st.wP, st.wF, st.stretch, st.alpha);
         dispersion = getDispersion(combined);
-      }
-      if (dispersion < 0.05) {
-        console.warn('DIVERSITY_LOW_PERSISTENT -> sigma stretch 20%');
-        combined = combine(0.75, 0.25, 1.2);
-        dispersion = getDispersion(combined);
-      }
-      if (dispersion < 0.05) {
-        console.error('ERROR_DIVERSITY: dispersion still <5pp after recalibration', { dispersion });
       }
 
+      if (dispersion < 0.05) {
+        console.error('ERROR_DIVERSITY: dispersion still <5pp after iterative recalibration', { dispersion });
+      }
+
+      // Additional clustering guard: if >=3 assets within ±1%, amplify alpha once more
       const clusterAssets = () => {
         const within = [] as Array<{id:string,p:number}>;
         for (let i=0;i<combined.length;i++){
@@ -354,18 +359,14 @@ const Market = () => {
       };
 
       let cluster = clusterAssets();
-      if (cluster.length >= 4 && stdPPrice > 0.015) {
-        console.warn('RECALIBRATED_WEIGHTS to 0.75/0.25 due to clustering');
-        combined = combine(0.75, 0.25);
+      if (cluster.length >= 3) {
+        console.warn('CLUSTER_±1% >=3 ASSETS -> final alpha boost');
+        combined = combine(0.75, 0.25, 0.85, 2.2);
         cluster = clusterAssets();
       }
-      if (cluster.length >= 4) {
-        console.warn('SIGMA_STRETCH_20P due to persistent clustering');
-        combined = combine(0.75, 0.25, 1.2);
-        cluster = clusterAssets();
-      }
-      if (cluster.length >= 4) {
-        console.warn('TOO_SIMILAR_CLUSTER', cluster);
+
+      if (cluster.length >= 3) {
+        console.warn('TOO_SIMILAR_CLUSTER_AFTER_FINAL_BOOST', cluster);
       }
 
       // Detect duplicate min/max pairs across assets (copy error audit)
@@ -385,7 +386,7 @@ const Market = () => {
         const probability = pAltaFinal >= 0.5 ? (pAltaFinal * 100) : ((1 - pAltaFinal) * 100);
 
          // Range validation: within 30%..400% of current price and must be observed
-        const inBounds = (s.minObserved >= s.price*0.3) && (s.maxObserved <= s.price*4);
+        const inBounds = (s.minObserved >= s.price*0.5) && (s.maxObserved <= s.price*4);
         const rf = rangeFailures[s.id] || 0;
         const rangeStatus: 'ok' | 'review' = rf >= 2 ? 'review' : (inBounds ? 'ok' : 'review');
 
