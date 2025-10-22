@@ -31,6 +31,7 @@ export const CryptoCard = ({
   confidence,
   rangeStatus,
   dataStatus,
+  debug,
 }: CryptoCardProps) => {
   return (
     <div className="glass-effect rounded-xl p-5 border border-primary/20 hover:border-primary/40 transition-all duration-300 group">

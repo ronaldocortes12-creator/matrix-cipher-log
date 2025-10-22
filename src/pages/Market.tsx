@@ -370,9 +370,6 @@ const Market = () => {
       if (countCluster(combined) >= 3) {
         wPrice = 0.75;
         wFlow = 0.25;
-        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up) + (wFlow * s.p_flow_up) }));
-      }
-        wFlow = 0.25;
         combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up_adj) + (wFlow * s.p_flow_up) }));
       }
 
