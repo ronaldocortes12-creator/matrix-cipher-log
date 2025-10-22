@@ -47,6 +47,11 @@ const Chat = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Set initial sidebar state based on device size
+  useEffect(() => {
+    setIsSidebarOpen(!isMobile);
+  }, [isMobile]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -457,20 +462,32 @@ const Chat = () => {
       </Button>
 
       {/* Sidebar */}
-      <div className={`
-        relative z-20 transition-all duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        ${isMobile ? 'absolute left-0 top-0 h-full shadow-2xl' : ''}
-      `}>
-        <ChatSidebar
-          lessons={lessons}
-          activeLessonId={activeLessonId}
-          onSelectLesson={(lessonId) => {
-            handleSelectLesson(lessonId);
-            if (isMobile) setIsSidebarOpen(false);
-          }}
-        />
-      </div>
+      {isMobile ? (
+        <div
+          className={`fixed left-0 top-0 h-full z-20 shadow-2xl transition-transform duration-300 ${
+            isSidebarOpen ? 'translate-x-0 animate-slide-in-right' : '-translate-x-full'
+          }`}
+        >
+          <ChatSidebar
+            lessons={lessons}
+            activeLessonId={activeLessonId}
+            onSelectLesson={(lessonId) => {
+              handleSelectLesson(lessonId);
+              setIsSidebarOpen(false);
+            }}
+          />
+        </div>
+      ) : (
+        isSidebarOpen && (
+          <div className="relative z-20">
+            <ChatSidebar
+              lessons={lessons}
+              activeLessonId={activeLessonId}
+              onSelectLesson={handleSelectLesson}
+            />
+          </div>
+        )
+      )}
 
       {/* Overlay for mobile */}
       {isMobile && isSidebarOpen && (
