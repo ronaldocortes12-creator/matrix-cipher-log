@@ -89,6 +89,7 @@ const Market = () => {
 
       // STEP 2: Fetch historical data with cache + rate limiting + provider fallback
       const historicalMap: Record<string, any[]> = {};
+      const rangeFailures: Record<string, number> = {};
       
       for (const crypto of cryptoList) {
         // Check cache first
@@ -110,24 +111,64 @@ const Market = () => {
 
         // Fetch with rate limiting + retry + provider fallback (CG -> Binance -> Mock)
         try {
-          const { prices, source, ms } = await rateLimiter.add(async () => fetchHistoricalWithFallback(crypto.id, crypto.symbol));
-
-          historicalMap[crypto.id] = prices;
-          
-          // Cache successful fetch
+          // Try providers in order: CoinGecko -> Binance; validate range vs current price before accepting
           const currentData = priceData[crypto.id];
-          if (currentData && prices.length > 0) {
+          const priceNow = currentData?.usd || 0;
+
+          const tryProvider = async (provider: 'coingecko' | 'binance') => {
+            if (provider === 'coingecko') {
+              return await rateLimiter.add(async () => fetchHistoricalFromCoingecko(crypto.id));
+            }
+            return await rateLimiter.add(async () => fetchHistoricalFromBinance(crypto.id, crypto.symbol));
+          };
+
+          let selected: { prices: any[]; source: string; ms: number } | null = null;
+          let attempts: Array<'coingecko' | 'binance'> = [];
+
+          for (const prov of ['coingecko', 'binance'] as const) {
+            attempts.push(prov);
+            try {
+              const res = await tryProvider(prov);
+              const closesTmp = (res.prices || []).map((p: any) => p[1]).filter((v: any) => typeof v === 'number' && isFinite(v));
+              const minObsTmp = closesTmp.length ? Math.min(...closesTmp) : Infinity;
+              const maxObsTmp = closesTmp.length ? Math.max(...closesTmp) : -Infinity;
+              const invalidRange = priceNow > 0 && (minObsTmp < priceNow * 0.5 || maxObsTmp > priceNow * 4);
+              if (invalidRange) {
+                rangeFailures[crypto.id] = (rangeFailures[crypto.id] || 0) + 1;
+                console.warn(`[${crypto.symbol}] Range invalid from ${prov}, retrying alternate source...`, { priceNow, minObsTmp, maxObsTmp });
+                continue; // try next provider
+              }
+              selected = res;
+              break;
+            } catch (e) {
+              console.warn(`[${crypto.symbol}] Provider error: ${prov}`, e);
+              rangeFailures[crypto.id] = (rangeFailures[crypto.id] || 0) + 1;
+              continue;
+            }
+          }
+
+          // If none selected, fall back (keep data but mark review/insufficient downstream)
+          if (!selected) {
+            const fallback = await rateLimiter.add(async () => fetchHistoricalWithFallback(crypto.id, crypto.symbol));
+            selected = fallback;
+          }
+
+          historicalMap[crypto.id] = selected.prices;
+
+          // Cache only if we had no range failures for this asset in this run
+          if (currentData && selected.prices.length > 0 && (rangeFailures[crypto.id] || 0) === 0) {
             cryptoCache.set(`prices:${crypto.id}`, {
-              prices,
+              prices: selected.prices,
               currentPrice: currentData.usd,
               change24h: currentData.usd_24h_change
             });
           }
-          
-          console.log(`[${crypto.symbol}] Fetched ${prices.length} historical data points from ${source} in ${ms.toFixed(0)}ms`);
+
+          console.log(`[${crypto.symbol}] Fetched ${selected.prices.length} historical data points from ${selected.source} in ${selected.ms.toFixed(0)}ms`);
         } catch (error) {
           console.warn(`[${crypto.symbol}] Historical fetch failed across providers, using mock:`, error);
           historicalMap[crypto.id] = mockHistoricalPrices[crypto.id] || [];
+          rangeFailures[crypto.id] = (rangeFailures[crypto.id] || 0) + 1;
           
           // Use mock current price too if needed
           if (!priceData[crypto.id]) {
@@ -257,11 +298,34 @@ const Market = () => {
       };
 
       let combined = combine(0.60, 0.40);
+      
+      const getDispersion = (arr: Array<{id:string,p:number}>) => {
+        if (!arr.length) return 0;
+        const ps = arr.map(a => a.p);
+        return Math.max(...ps) - Math.min(...ps);
+      };
+
+      // Enforce diversity: if max-min < 5pp, recalibrate weights to 75/25 and then stretch sigma
+      let dispersion = getDispersion(combined);
+      if (dispersion < 0.05) {
+        console.warn('DIVERSITY_LOW_5PP -> recalibrate weights to 0.75/0.25');
+        combined = combine(0.75, 0.25);
+        dispersion = getDispersion(combined);
+      }
+      if (dispersion < 0.05) {
+        console.warn('DIVERSITY_LOW_PERSISTENT -> sigma stretch 20%');
+        combined = combine(0.75, 0.25, 1.2);
+        dispersion = getDispersion(combined);
+      }
+      if (dispersion < 0.05) {
+        console.error('ERROR_DIVERSITY: dispersion still <5pp after recalibration', { dispersion });
+      }
+
       const clusterAssets = () => {
         const within = [] as Array<{id:string,p:number}>;
         for (let i=0;i<combined.length;i++){
           for (let j=i+1;j<combined.length;j++){
-            if (Math.abs(combined[i].p - combined[j].p) <= 0.015){
+            if (Math.abs(combined[i].p - combined[j].p) <= 0.01){
               if (!within.find(w=>w.id===combined[i].id)) within.push(combined[i]);
               if (!within.find(w=>w.id===combined[j].id)) within.push(combined[j]);
             }
@@ -284,6 +348,16 @@ const Market = () => {
       if (cluster.length >= 4) {
         console.warn('TOO_SIMILAR_CLUSTER', cluster);
       }
+
+      // Detect duplicate min/max pairs across assets (copy error audit)
+      const pairCounts: Record<string, number> = {};
+      stats.forEach(s => {
+        const key = `${s.minObserved.toFixed(8)}|${s.maxObserved.toFixed(8)}`;
+        pairCounts[key] = (pairCounts[key] || 0) + 1;
+      });
+      const duplicateMinMaxIds = new Set(
+        stats.filter(s => pairCounts[`${s.minObserved.toFixed(8)}|${s.maxObserved.toFixed(8)}`] > 1).map(s => s.id)
+      );
 
       const cryptosWithData: Crypto[] = stats.map((s) => {
         const comb = combined.find(c => c.id === s.id)!;
