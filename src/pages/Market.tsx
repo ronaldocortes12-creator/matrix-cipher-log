@@ -3,6 +3,8 @@ import { TabBar } from "@/components/TabBar";
 import { MatrixRain } from "@/components/MatrixRain";
 import { CryptoCard } from "@/components/CryptoCard";
 import { useToast } from "@/hooks/use-toast";
+import { cryptoCache, rateLimiter, fetchWithRetry } from "@/utils/cryptoDataCache";
+import { mockHistoricalPrices, mockCurrentPrices } from "@/utils/cryptoMockData";
 
 type Crypto = {
   name: string;
@@ -54,36 +56,100 @@ const Market = () => {
         { id: 'filecoin', symbol: 'FIL', name: 'Filecoin', logo: 'https://assets.coingecko.com/coins/images/12817/small/filecoin.png' },
       ];
 
-      // Fetch current prices from CoinGecko API
-      const ids = cryptoList.map(c => c.id).join(',');
-      const response = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
-      );
+      console.log('[MARKET] Starting data load with cache + fallback system');
+
+      // STEP 1: Fetch current prices (with retry and fallback)
+      let priceData: Record<string, any> = {};
       
-      const priceData = await response.json();
-
-      // Fetch historical data for statistical analysis (365 days due to API limits)
-      const historicalPromises = cryptoList.map(async (crypto) => {
-        try {
-          const histResponse = await fetch(
-            `https://api.coingecko.com/api/v3/coins/${crypto.id}/market_chart?vs_currency=usd&days=365&interval=daily`
+      try {
+        const ids = cryptoList.map(c => c.id).join(',');
+        priceData = await fetchWithRetry(async () => {
+          const response = await fetch(
+            `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
           );
-          const histData = await histResponse.json();
-          return { id: crypto.id, prices: histData.prices || [] };
-        } catch (error) {
-          console.error(`Error fetching historical data for ${crypto.id}:`, error);
-          return { id: crypto.id, prices: [] };
+          
+          if (!response.ok) {
+            throw new Error(`Price API failed: ${response.status}`);
+          }
+          
+          return await response.json();
+        });
+        console.log('[MARKET] Current prices fetched successfully');
+      } catch (error) {
+        console.warn('[MARKET] Price API failed, using mock data:', error);
+        priceData = mockCurrentPrices;
+      }
+
+      // STEP 2: Fetch historical data with cache + rate limiting
+      const historicalMap: Record<string, any[]> = {};
+      
+      for (const crypto of cryptoList) {
+        // Check cache first
+        const cached = cryptoCache.get(crypto.id);
+        
+        if (cached) {
+          console.log(`[${crypto.symbol}] Using cached data (age: ${Math.floor((Date.now() - cached.timestamp) / 60000)}min)`);
+          historicalMap[crypto.id] = cached.prices;
+          
+          // Update current price from cache
+          if (!priceData[crypto.id]) {
+            priceData[crypto.id] = {
+              usd: cached.currentPrice,
+              usd_24h_change: cached.change24h
+            };
+          }
+          continue;
         }
-      });
 
-      const historicalData = await Promise.all(historicalPromises);
-      const historicalMap = Object.fromEntries(
-        historicalData.map(h => [h.id, h.prices])
-      );
+        // Fetch with rate limiting + retry
+        try {
+          const prices = await rateLimiter.add(async () => {
+            return await fetchWithRetry(async () => {
+              const response = await fetch(
+                `https://api.coingecko.com/api/v3/coins/${crypto.id}/market_chart?vs_currency=usd&days=365&interval=daily`
+              );
+              
+              if (!response.ok) {
+                if (response.status === 429) {
+                  throw new Error('RATE_LIMITED');
+                }
+                throw new Error(`Historical API failed: ${response.status}`);
+              }
+              
+              const data = await response.json();
+              return data.prices || [];
+            }, 2, 2000); // 2 retries, 2s base delay
+          });
 
-      // Calculate BTC flow component (for 40% weight)
+          historicalMap[crypto.id] = prices;
+          
+          // Cache successful fetch
+          const currentData = priceData[crypto.id];
+          if (currentData && prices.length > 0) {
+            cryptoCache.set(crypto.id, {
+              prices,
+              currentPrice: currentData.usd,
+              change24h: currentData.usd_24h_change
+            });
+          }
+          
+          console.log(`[${crypto.symbol}] Fetched ${prices.length} historical data points`);
+        } catch (error) {
+          console.warn(`[${crypto.symbol}] Historical fetch failed, using mock:`, error);
+          historicalMap[crypto.id] = mockHistoricalPrices[crypto.id] || [];
+          
+          // Use mock current price too if needed
+          if (!priceData[crypto.id]) {
+            priceData[crypto.id] = mockCurrentPrices[crypto.id];
+          }
+        }
+      }
+
+      // STEP 3: Calculate BTC flow component (for 40% weight)
       const btcFlowComponent = calculateBTCFlowComponent(historicalMap['bitcoin'] || []);
+      console.log(`[BTC_FLOW] p_alta=${btcFlowComponent.pAlta.toFixed(3)}, p_queda=${btcFlowComponent.pQueda.toFixed(3)}`);
 
+      // STEP 4: Process each crypto independently
       const cryptosWithData: Crypto[] = cryptoList.map(crypto => {
         const data = priceData[crypto.id];
         const price = data?.usd || 0;
@@ -146,6 +212,8 @@ const Market = () => {
               pAltaPreco = 1 - pQuedaPreco;
             }
           }
+        } else {
+          console.warn(`[${crypto.symbol}] Insufficient data (${historicalPricesData.length} points) - using neutral probabilities`);
         }
 
         // Component 2: BTC flow component (40% weight) - SAME for all except BTC
@@ -186,16 +254,18 @@ const Market = () => {
         };
       });
 
+      console.log(`[MARKET] Successfully processed ${cryptosWithData.length} cryptos`);
       setCryptos(cryptosWithData);
+      
     } catch (error) {
-      console.error('Error loading crypto data:', error);
+      console.error('[MARKET] CRITICAL ERROR - falling back to full mock data:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar dados do mercado. Usando dados em cache.",
-        variant: "destructive"
+        title: "Modo Offline",
+        description: "Usando dados em cache. Algumas informações podem estar desatualizadas.",
+        variant: "default"
       });
       
-      // Fallback to mock data
+      // Complete fallback
       loadMockData();
     } finally {
       setIsLoading(false);
