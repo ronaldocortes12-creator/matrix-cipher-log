@@ -101,8 +101,8 @@ export const CryptoCard = ({
                 <TooltipContent className="max-w-[320px] text-xs">
                   <div className="space-y-1">
                     <div><strong>μ</strong>: {debug?.mu?.toFixed(6)} | <strong>σ</strong>: {debug?.sigma?.toFixed(6)}</div>
-                    <div><strong>IC95</strong>: [{(debug?.ic95_low! * 100).toFixed(2)}%, {(debug?.ic95_high! * 100).toFixed(2)}%]</div>
-                    <div><strong>p_preço↑</strong>: {(debug?.p_price_up! * 100).toFixed(2)}% | <strong>p_fluxo↑</strong>: {(debug?.p_flow_up! * 100).toFixed(2)}%</div>
+                    <div><strong>IC95</strong>: [{debug?.ic95_low?.toFixed(2)}%, {debug?.ic95_high?.toFixed(2)}%]</div>
+                    <div><strong>p_preço↑</strong>: {(debug?.p_price_up! * 100).toFixed(2)}% | <strong>p_marketcap↑</strong>: {(debug?.p_flow_up! * 100).toFixed(2)}%</div>
                     <div><strong>pesos</strong>: preço {debug?.weights?.wPrice}, fluxo {debug?.weights?.wFlow}</div>
                     <div><strong>p_final↑</strong>: {(debug?.p_final_up! * 100).toFixed(2)}%</div>
                     <div><strong>pontos</strong>: {debug?.nPoints} | <strong>fonte</strong>: {debug?.data_source_prices} ({debug?.data_source_ms}ms)</div>

@@ -211,45 +211,66 @@ const loadCryptoData = async () => {
       let marketCapHistory365: number[] = [];
       
       try {
-        // Usar localStorage diretamente para market cap (estrutura diferente)
         const cachedMC = localStorage.getItem('crypto_cache_global:marketcap365');
         if (ALLOW_CACHE && cachedMC) {
           const parsed = JSON.parse(cachedMC);
-          const isExpired = Date.now() - parsed.timestamp > (6 * 60 * 60 * 1000); // 6h
-          if (!isExpired) {
+          const isExpired = Date.now() - parsed.timestamp > (60 * 60 * 1000); // 1h cache
+          if (!isExpired && Array.isArray(parsed.data) && parsed.data.length >= 300) {
             marketCapHistory365 = parsed.data;
             console.log(`[MARKET CAP] ✅ Usando cache (age: ${Math.floor((Date.now() - parsed.timestamp) / 60000)}min)`);
           }
         }
         
         if (marketCapHistory365.length === 0) {
-          const response = await fetchWithRetry(async () => {
-            const res = await fetch('https://api.coingecko.com/api/v3/global');
-            if (!res.ok) throw new Error(`Global API failed: ${res.status}`);
-            return await res.json();
-          });
-          
-          // Pegar market cap atual
-          const currentMarketCap = response.data?.total_market_cap?.usd || 0;
-          
-          // Buscar histórico de 365 dias (usando bitcoin como proxy proporcional)
-          const btcData = historicalMap['bitcoin'] || [];
-          if (btcData.length >= 365) {
-            const btcCloses = btcData.slice(-365).map((p: any) => p[1]);
-            const btcNow = btcCloses[btcCloses.length - 1];
-            // Escalar proporcionalmente (assumindo correlação alta entre BTC e market cap total)
-            marketCapHistory365 = btcCloses.map(btc => currentMarketCap * (btc / btcNow));
-          } else {
-            // Fallback: criar série sintética
-            marketCapHistory365 = Array(365).fill(currentMarketCap);
+          // Preferir endpoint histórico real do Market Cap total
+          const fetchGlobalMC = async () => {
+            const t0 = performance.now();
+            const res = await fetch('https://api.coingecko.com/api/v3/global/market_cap_chart?vs_currency=usd&days=365');
+            if (!res.ok) throw new Error(`Global MC chart API failed: ${res.status}`);
+            const data = await res.json();
+
+            // Tentar vários possíveis campos de resposta
+            const series: any[] =
+              (data?.market_cap) ||
+              (data?.total_market_cap) ||
+              (data?.market_caps) ||
+              (data?.total_market_caps) ||
+              [];
+
+            const arr = Array.isArray(series) ? series : [];
+            const values = arr.map((p: any) => Array.isArray(p) ? p[1] : Number(p)).filter((v: any) => typeof v === 'number' && isFinite(v));
+            console.log(`[MARKET CAP] Coingecko global chart em ${(performance.now()-t0).toFixed(0)}ms, pontos: ${values.length}`);
+            return values;
+          };
+
+          try {
+            marketCapHistory365 = await fetchWithRetry(fetchGlobalMC);
+          } catch (e) {
+            console.warn('[MARKET CAP] ⚠️ Falha no endpoint histórico. Fallback: escalar via BTC', e);
+            // Fallback: usar market cap atual + série do BTC como proxy proporcional
+            const response = await fetchWithRetry(async () => {
+              const res = await fetch('https://api.coingecko.com/api/v3/global');
+              if (!res.ok) throw new Error(`Global API failed: ${res.status}`);
+              return await res.json();
+            });
+
+            const currentMarketCap = response.data?.total_market_cap?.usd || 0;
+            const btcData = historicalMap['bitcoin'] || [];
+            if (btcData.length >= 365) {
+              const btcCloses = btcData.slice(-365).map((p: any) => p[1]);
+              const btcNow = btcCloses[btcCloses.length - 1] || 1;
+              marketCapHistory365 = btcCloses.map((btc: number) => currentMarketCap * (btc / btcNow));
+            } else {
+              marketCapHistory365 = Array(365).fill(currentMarketCap || 2.5e12);
+            }
           }
-          
+
           // Salvar cache
           localStorage.setItem('crypto_cache_global:marketcap365', JSON.stringify({
             data: marketCapHistory365,
             timestamp: Date.now()
           }));
-          console.log(`[MARKET CAP] ✅ Obtido ${marketCapHistory365.length} pontos (atual: $${(currentMarketCap / 1e12).toFixed(2)}T)`);
+          console.log(`[MARKET CAP] ✅ Obtido ${marketCapHistory365.length} pontos (último: $${(marketCapHistory365.at(-1)! / 1e12).toFixed(2)}T)`);
         }
       } catch (error) {
         console.warn('[MARKET CAP] ⚠️ Erro ao buscar, usando fallback:', error);
