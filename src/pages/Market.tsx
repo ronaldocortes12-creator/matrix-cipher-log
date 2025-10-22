@@ -19,6 +19,20 @@ type Crypto = {
   confidence: number;
   rangeStatus?: 'ok' | 'review';
   dataStatus?: 'ok' | 'insufficient';
+  debug?: {
+    nPoints: number;
+    mu: number;
+    sigma: number;
+    ic95_low: number;
+    ic95_high: number;
+    p_price_up: number;
+    p_flow_up: number;
+    p_final_up: number;
+    weights: { wPrice: number; wFlow: number };
+    data_source_prices: string;
+    data_source_ms: number;
+    flow_meta?: { nfRecent: number; meanNF: number; stdDevNF: number; zAbs: number; m: number; source: string };
+  };
 };
 
 const Market = () => {
@@ -358,6 +372,9 @@ const Market = () => {
         wFlow = 0.25;
         combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up) + (wFlow * s.p_flow_up) }));
       }
+        wFlow = 0.25;
+        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up_adj) + (wFlow * s.p_flow_up) }));
+      }
 
       // Detect duplicate min/max pairs across assets (copy error audit)
       const pairCounts: Record<string, number> = {};
@@ -375,7 +392,7 @@ const Market = () => {
         const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
         const probability = pAltaFinal >= 0.5 ? (pAltaFinal * 100) : ((1 - pAltaFinal) * 100);
 
-         // Range: always real observed min/max (validated during fetch)
+        // Range: sempre observado (validado na coleta)
         const rangeStatus: 'ok' = 'ok';
 
         return {
@@ -391,6 +408,20 @@ const Market = () => {
           confidence: 95,
           rangeStatus,
           dataStatus: 'ok',
+          debug: {
+            nPoints: s.nPoints,
+            mu: s.mu,
+            sigma: s.sigma,
+            ic95_low: s.mu - 1.96 * s.sigma,
+            ic95_high: s.mu + 1.96 * s.sigma,
+            p_price_up: s.p_price_up,
+            p_flow_up: s.p_flow_up,
+            p_final_up: pAltaFinal,
+            weights: { wPrice, wFlow },
+            data_source_prices: s.data_source_prices,
+            data_source_ms: s.data_source_ms,
+            flow_meta: { nfRecent: btcFlowComponent.nfRecent, meanNF: btcFlowComponent.meanNF, stdDevNF: btcFlowComponent.stdDevNF, zAbs: btcFlowComponent.zAbs, m: btcFlowComponent.m, source: btcFlowComponent.source }
+          }
         };
       });
 
@@ -422,52 +453,51 @@ const Market = () => {
     return z > 0 ? 1 - prob : prob;
   };
 
-  const calculateBTCFlowComponent = (btcHistoricalData: any[]): { pAlta: number; pQueda: number } => {
+  const calculateBTCFlowComponent = (btcHistoricalData: any[]): { pAlta: number; pQueda: number; nfRecent: number; meanNF: number; stdDevNF: number; zAbs: number; m: number; source: string } => {
     if (btcHistoricalData.length < 30) {
-      return { pAlta: 0.5, pQueda: 0.5 };
+      return { pAlta: 0.5, pQueda: 0.5, nfRecent: 0, meanNF: 0, stdDevNF: 1, zAbs: 0, m: 0.5, source: 'proxy_btc_price_magnitude' };
     }
 
     const prices = btcHistoricalData.map((p: any) => p[1]);
-    
-    // Calculate daily price changes as proxy for "net flows"
+    // Proxy de fluxo via magnitude de variação de preço (fallback quando netflows reais indisponíveis)
     const flows: number[] = [];
     for (let i = 1; i < prices.length; i++) {
       const flow = prices[i] - prices[i - 1];
       flows.push(flow);
     }
 
-    // Recent window (last 3 days)
+    // Janela recente (3 dias)
     const k = 3;
     const recentFlows = flows.slice(-k);
     const nfRecent = recentFlows.reduce((sum, f) => sum + f, 0);
 
-    // Calculate mean and std dev of all flows
     const meanNF = flows.reduce((sum, f) => sum + f, 0) / flows.length;
     const varianceNF = flows.reduce((sum, f) => sum + Math.pow(f - meanNF, 2), 0) / flows.length;
     const stdDevNF = Math.sqrt(varianceNF);
 
-    // Z-score of magnitude (absolute value)
     const epsilon = 1e-8;
     const zAbs = Math.abs(nfRecent - meanNF) / (stdDevNF + epsilon);
-
-    // Compress to [0,1] using logistic function
     const m = 1 / (1 + Math.exp(-zAbs));
 
-    // High flow (in or out) → higher probability of Alta
     return {
       pAlta: m,
-      pQueda: 1 - m
+      pQueda: 1 - m,
+      nfRecent,
+      meanNF,
+      stdDevNF,
+      zAbs,
+      m,
+      source: 'proxy_btc_price_magnitude'
     };
   };
-
   // 3h cache for BTC flow component
-  const getBTCFlowComponentWithCache = async (btcHistoricalData: any[]): Promise<{ pAlta: number; pQueda: number }> => {
+  const getBTCFlowComponentWithCache = async (btcHistoricalData: any[]): Promise<{ pAlta: number; pQueda: number; nfRecent: number; meanNF: number; stdDevNF: number; zAbs: number; m: number; source: string }> => {
     try {
       const raw = localStorage.getItem('btc_flow_cache');
       if (raw) {
-        const cached = JSON.parse(raw) as { pAlta: number; pQueda: number; ts: number };
+        const cached = JSON.parse(raw) as { pAlta: number; pQueda: number; ts: number; nfRecent: number; meanNF: number; stdDevNF: number; zAbs: number; m: number; source: string };
         if (Date.now() - cached.ts < 3 * 60 * 60 * 1000) { // 3 hours
-          return { pAlta: cached.pAlta, pQueda: cached.pQueda };
+          return { pAlta: cached.pAlta, pQueda: cached.pQueda, nfRecent: cached.nfRecent, meanNF: cached.meanNF, stdDevNF: cached.stdDevNF, zAbs: cached.zAbs, m: cached.m, source: cached.source };
         }
       }
     } catch {}

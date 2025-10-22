@@ -1,5 +1,6 @@
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type CryptoCardProps = {
   name: string;
@@ -14,6 +15,7 @@ type CryptoCardProps = {
   confidence: number;
   rangeStatus?: 'ok' | 'review';
   dataStatus?: 'ok' | 'insufficient';
+  debug?: any;
 };
 
 export const CryptoCard = ({
@@ -73,24 +75,43 @@ export const CryptoCard = ({
       <div className="mb-4">
         <div className="flex items-center justify-between text-sm mb-1">
           <span className="text-muted-foreground">Probabilidade de {probabilityType}</span>
-          {dataStatus !== 'insufficient' ? (
-            <span
-              className={cn(
-                "font-semibold px-2 py-0.5 rounded",
-                probabilityType === "Alta"
-                  ? "bg-green-500/20 text-green-400"
-                  : "bg-red-500/20 text-red-400"
-              )}
-            >
-              {probability.toFixed(1)}%
-            </span>
-          ) : (
-            <span className="text-xs text-yellow-500">Dados insuficientes</span>
-          )}
+          <div className="flex items-center gap-2">
+            {dataStatus !== 'insufficient' ? (
+              <span
+                className={cn(
+                  "font-semibold px-2 py-0.5 rounded",
+                  probabilityType === "Alta"
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-red-500/20 text-red-400"
+                )}
+              >
+                {probability.toFixed(1)}%
+              </span>
+            ) : (
+              <span className="text-xs text-yellow-500">Dados insuficientes</span>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button aria-label="Ver detalhes" className="p-1 rounded hover:bg-primary/10">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[320px] text-xs">
+                  <div className="space-y-1">
+                    <div><strong>μ</strong>: {debug?.mu?.toFixed(6)} | <strong>σ</strong>: {debug?.sigma?.toFixed(6)}</div>
+                    <div><strong>IC95</strong>: [{(debug?.ic95_low! * 100).toFixed(2)}%, {(debug?.ic95_high! * 100).toFixed(2)}%]</div>
+                    <div><strong>p_preço↑</strong>: {(debug?.p_price_up! * 100).toFixed(2)}% | <strong>p_fluxo↑</strong>: {(debug?.p_flow_up! * 100).toFixed(2)}%</div>
+                    <div><strong>pesos</strong>: preço {debug?.weights?.wPrice}, fluxo {debug?.weights?.wFlow}</div>
+                    <div><strong>p_final↑</strong>: {(debug?.p_final_up! * 100).toFixed(2)}%</div>
+                    <div><strong>pontos</strong>: {debug?.nPoints} | <strong>fonte</strong>: {debug?.data_source_prices} ({debug?.data_source_ms}ms)</div>
+                    <div><strong>flow</strong>: z={debug?.flow_meta?.zAbs?.toFixed(3)} m={debug?.flow_meta?.m?.toFixed(3)} nf3={debug?.flow_meta?.nfRecent?.toFixed(2)}</div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
-        {dataStatus === 'insufficient' && (
-          <div className="text-xs text-yellow-500">Dados insuficientes (janela {'<'} 330 dias)</div>
-        )}
       </div>
 
       {/* Price Range */}
