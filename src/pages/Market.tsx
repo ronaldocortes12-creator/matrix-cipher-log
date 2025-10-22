@@ -91,31 +91,37 @@ const Market = () => {
         
         const trend: "up" | "down" = change24h >= 0 ? "up" : "down";
         
-        // Statistical calculation using historical data
+        // CRITICAL: Use ONLY this asset's historical data (no shared variables!)
         const historicalPricesData = historicalMap[crypto.id] || [];
         
         let minPrice = price * 0.70;
         let maxPrice = price * 1.30;
         let pAltaPreco = 0.5;
         let pQuedaPreco = 0.5;
+        let mean = 0;
+        let stdDev = 0;
+        let nPoints = 0;
 
+        // Component 1: Price-based probability (60% weight) - INDEPENDENT per asset
         if (historicalPricesData.length > 30) {
-          const prices = historicalPricesData.map((p: any) => p[1]);
+          // Extract ONLY this asset's prices (365 days daily close)
+          const assetPrices = historicalPricesData.map((p: any) => p[1]);
+          nPoints = assetPrices.length;
           
-          // Calculate log returns
-          const returns: number[] = [];
-          for (let i = 1; i < prices.length; i++) {
-            const logReturn = Math.log(prices[i]) - Math.log(prices[i - 1]);
+          // Calculate log returns for THIS asset ONLY
+          const assetReturns: number[] = [];
+          for (let i = 1; i < assetPrices.length; i++) {
+            const logReturn = Math.log(assetPrices[i]) - Math.log(assetPrices[i - 1]);
             if (isFinite(logReturn)) {
-              returns.push(logReturn);
+              assetReturns.push(logReturn);
             }
           }
 
-          if (returns.length > 0) {
-            // Calculate mean and std dev
-            const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-            const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
-            const stdDev = Math.sqrt(variance);
+          if (assetReturns.length > 0) {
+            // Calculate mean and std dev for THIS asset ONLY
+            mean = assetReturns.reduce((sum, r) => sum + r, 0) / assetReturns.length;
+            const variance = assetReturns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / assetReturns.length;
+            stdDev = Math.sqrt(variance);
 
             // Confidence interval 95%
             const ic95Lower = mean - 1.96 * stdDev;
@@ -125,20 +131,29 @@ const Market = () => {
             minPrice = Math.max(0, price * Math.exp(ic95Lower * 30)); // ~1 month projection
             maxPrice = price * Math.exp(ic95Upper * 30);
 
-            // Probability of drop using Normal CDF
+            // Probability calculation with sanity check
             const epsilon = 1e-8;
-            const zScore = (0 - mean) / (stdDev + epsilon);
-            pQuedaPreco = normalCDF(zScore);
-            pAltaPreco = 1 - pQuedaPreco;
+            
+            // Low variance check - force neutral if asset has very low volatility
+            if (stdDev < epsilon) {
+              console.debug(`[${crypto.symbol}] LOW_VARIANCE_ASSET - forcing neutral probability`);
+              pAltaPreco = 0.5;
+              pQuedaPreco = 0.5;
+            } else {
+              // Normal probability calculation
+              const zScore = (0 - mean) / (stdDev + epsilon);
+              pQuedaPreco = normalCDF(zScore);
+              pAltaPreco = 1 - pQuedaPreco;
+            }
           }
         }
 
-        // Combine with BTC flow component (60% price + 40% BTC flow)
+        // Component 2: BTC flow component (40% weight) - SAME for all except BTC
         let pAltaFluxo = 0.5;
         let pQuedaFluxo = 0.5;
         
         if (crypto.id === 'bitcoin') {
-          // For BTC itself, use neutral flow component
+          // For BTC itself, use neutral flow to avoid circularity
           pAltaFluxo = 0.5;
           pQuedaFluxo = 0.5;
         } else {
@@ -146,9 +161,12 @@ const Market = () => {
           pQuedaFluxo = btcFlowComponent.pQueda;
         }
 
-        // Final weighted probability
+        // Final weighted probability: 60% price + 40% BTC flow
         const pAltaFinal = 0.60 * pAltaPreco + 0.40 * pAltaFluxo;
         const pQuedaFinal = 1 - pAltaFinal;
+
+        // Debug log per asset
+        console.debug(`[${crypto.symbol}] μ=${mean.toFixed(6)}, σ=${stdDev.toFixed(6)}, p_price_up=${pAltaPreco.toFixed(3)}, p_flow_up=${pAltaFluxo.toFixed(3)}, p_final_up=${pAltaFinal.toFixed(3)}, n=${nPoints}`);
 
         // Determine label and probability
         const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
