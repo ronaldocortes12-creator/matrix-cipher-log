@@ -91,6 +91,7 @@ const Market = () => {
       // STEP 2: Fetch historical data with cache + rate limiting + provider fallback
       const historicalMap: Record<string, any[]> = {};
       const rangeFailures: Record<string, number> = {};
+      const providerUsed: Record<string, { source: string; ms: number }> = {};
       
       for (const crypto of cryptoList) {
         // Check cache first
@@ -155,6 +156,7 @@ const Market = () => {
           }
 
           historicalMap[crypto.id] = selected.prices;
+          providerUsed[crypto.id] = { source: selected.source, ms: selected.ms };
 
           // Cache only if we had no range failures for this asset in this run
           if (currentData && selected.prices.length > 0 && (rangeFailures[crypto.id] || 0) === 0) {
@@ -194,12 +196,13 @@ const Market = () => {
         mu: number;
         sigma: number;
         p_price_up: number;
+        p_price_up_adj: number; // adjusted by volatility factor
         p_flow_up: number;
         minObserved: number;
         maxObserved: number;
         data_source_prices: string;
+        data_source_ms: number;
       };
-
       const stats: AssetStats[] = await Promise.all(
         cryptoList.map(async (c) => {
           const data = priceData[c.id];
@@ -213,17 +216,16 @@ const Market = () => {
 
           const prices_hash = await sha256Hex(closes);
 
-          // Log returns with 1% winsorization
+          // Log returns (no winsorization per spec)
           const rets: number[] = [];
           for (let i = 1; i < closes.length; i++) {
             const lr = Math.log(closes[i]) - Math.log(closes[i - 1]);
             if (isFinite(lr)) rets.push(lr);
           }
-          const wr = winsorize1pct(rets);
           let mu = 0, sigma = 0;
-          if (wr.length) {
-            mu = wr.reduce((s, r) => s + r, 0) / wr.length;
-            const variance = wr.reduce((s, r) => s + Math.pow(r - mu, 2), 0) / wr.length;
+          if (rets.length) {
+            mu = rets.reduce((s, r) => s + r, 0) / rets.length;
+            const variance = rets.reduce((s, r) => s + Math.pow(r - mu, 2), 0) / rets.length;
             sigma = Math.sqrt(variance);
           }
 
@@ -266,13 +268,28 @@ const Market = () => {
             mu,
             sigma,
             p_price_up,
+            p_price_up_adj: p_price_up,
             p_flow_up,
             minObserved,
             maxObserved,
-            data_source_prices: historicalMap[c.id] && historicalMap[c.id].length ? 'provider/cache/mock' : 'none'
+            data_source_prices: providerUsed[c.id]?.source || (historicalMap[c.id] && historicalMap[c.id].length ? 'provider/cache/mock' : 'none'),
+            data_source_ms: providerUsed[c.id]?.ms || 0,
           };
         })
       );
+
+      // Volatility-based contrast to enforce distinct probabilities per asset
+      const sigmas = stats.map(s => s.sigma).filter(s => isFinite(s) && s > 0).sort((a,b)=>a-b);
+      const medianSigma = sigmas.length ? (sigmas.length % 2 ? sigmas[(sigmas.length-1)/2] : (sigmas[sigmas.length/2 - 1] + sigmas[sigmas.length/2]) / 2) : 0;
+      if (medianSigma > 0) {
+        stats.forEach((s) => {
+          const factor = Math.min(1.6, Math.max(0.8, s.sigma / medianSigma));
+          const d = s.p_price_up - 0.5;
+          s.p_price_up_adj = Math.max(0.001, Math.min(0.999, 0.5 + d * factor));
+        });
+      } else {
+        stats.forEach((s) => { s.p_price_up_adj = s.p_price_up; });
+      }
 
       // Assertions
       const uniqueHashes = new Set(stats.map(s => s.prices_hash));
@@ -289,11 +306,12 @@ const Market = () => {
       // Detect cluster (±1.5%) on initial combine
       const combine = (wPrice: number, wFlow: number, sigmaFactor = 1) => {
         return stats.map(s => {
-          let p_price_up = s.p_price_up;
-          if (sigmaFactor !== 1 && s.sigma >= 1e-8) {
-            const z0 = (0 - s.mu) / Math.max(s.sigma * sigmaFactor, 1e-8);
-            p_price_up = 1 - normalCDF(z0);
-          }
+          // Recompute p_price_up from mu/sigma with optional sigma stretch
+          const sigmaEff = Math.max(s.sigma * sigmaFactor, 1e-8);
+          const p_price_raw = s.sigma < 1e-8 ? 0.5 : (1 - normalCDF((0 - s.mu) / sigmaEff));
+          // Apply volatility-based contrast so more volatile assets deviate more from 0.5
+          const factor = medianSigma > 0 ? Math.min(1.6, Math.max(0.8, s.sigma / medianSigma)) : 1;
+          const p_price_up = Math.max(0.001, Math.min(0.999, 0.5 + (p_price_raw - 0.5) * factor));
           return ({ id: s.id, p: wPrice * p_price_up + wFlow * s.p_flow_up, p_price_up });
         });
       };
