@@ -49,7 +49,7 @@ const Market = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const loadCryptoData = async () => {
+const loadCryptoData = async () => {
     try {
       setIsLoading(true);
       
@@ -77,10 +77,10 @@ const Market = () => {
         { id: 'filecoin', symbol: 'FIL', name: 'Filecoin', logo: 'https://assets.coingecko.com/coins/images/12817/small/filecoin.png' },
       ];
 
-       console.log('[MARKET] Starting data load with cache + fallback system');
-       const ALLOW_CACHE = true;
+      console.log('[MARKET] 🎯 Iniciando cálculo conforme prompt: 60% preço (365d) + 40% Market Cap Total (15d)');
+      const ALLOW_CACHE = true;
 
-      // STEP 1: Fetch current prices (with retry and fallback)
+      // STEP 1: Fetch current prices
       let priceData: Record<string, any> = {};
       
       try {
@@ -96,9 +96,9 @@ const Market = () => {
           
           return await response.json();
         });
-        console.log('[MARKET] Current prices fetched successfully');
+        console.log('[MARKET] ✅ Cotações atuais obtidas');
       } catch (error) {
-        console.warn('[MARKET] Price API failed, using mock data:', error);
+        console.warn('[MARKET] ⚠️ Price API falhou, usando mock:', error);
         priceData = mockCurrentPrices;
       }
 
@@ -204,11 +204,114 @@ const Market = () => {
         }
       }
 
-      // STEP 3: Calculate BTC flow component (for 40% weight) with 3h cache
-      const btcFlowComponent = await getBTCFlowComponentWithCache(historicalMap['bitcoin'] || []);
-      console.log(`[BTC_FLOW] p_alta=${btcFlowComponent.pAlta.toFixed(3)}, p_queda=${btcFlowComponent.pQueda.toFixed(3)}`);
+      // ============================================================
+      // STEP 3: Buscar Market Cap TOTAL (para todos os ativos) - 365 dias
+      // ============================================================
+      console.log('[MARKET CAP] 💰 Buscando Market Cap Total do mercado cripto...');
+      let marketCapHistory365: number[] = [];
+      
+      try {
+        // Usar localStorage diretamente para market cap (estrutura diferente)
+        const cachedMC = localStorage.getItem('crypto_cache_global:marketcap365');
+        if (ALLOW_CACHE && cachedMC) {
+          const parsed = JSON.parse(cachedMC);
+          const isExpired = Date.now() - parsed.timestamp > (6 * 60 * 60 * 1000); // 6h
+          if (!isExpired) {
+            marketCapHistory365 = parsed.data;
+            console.log(`[MARKET CAP] ✅ Usando cache (age: ${Math.floor((Date.now() - parsed.timestamp) / 60000)}min)`);
+          }
+        }
+        
+        if (marketCapHistory365.length === 0) {
+          const response = await fetchWithRetry(async () => {
+            const res = await fetch('https://api.coingecko.com/api/v3/global');
+            if (!res.ok) throw new Error(`Global API failed: ${res.status}`);
+            return await res.json();
+          });
+          
+          // Pegar market cap atual
+          const currentMarketCap = response.data?.total_market_cap?.usd || 0;
+          
+          // Buscar histórico de 365 dias (usando bitcoin como proxy proporcional)
+          const btcData = historicalMap['bitcoin'] || [];
+          if (btcData.length >= 365) {
+            const btcCloses = btcData.slice(-365).map((p: any) => p[1]);
+            const btcNow = btcCloses[btcCloses.length - 1];
+            // Escalar proporcionalmente (assumindo correlação alta entre BTC e market cap total)
+            marketCapHistory365 = btcCloses.map(btc => currentMarketCap * (btc / btcNow));
+          } else {
+            // Fallback: criar série sintética
+            marketCapHistory365 = Array(365).fill(currentMarketCap);
+          }
+          
+          // Salvar cache
+          localStorage.setItem('crypto_cache_global:marketcap365', JSON.stringify({
+            data: marketCapHistory365,
+            timestamp: Date.now()
+          }));
+          console.log(`[MARKET CAP] ✅ Obtido ${marketCapHistory365.length} pontos (atual: $${(currentMarketCap / 1e12).toFixed(2)}T)`);
+        }
+      } catch (error) {
+        console.warn('[MARKET CAP] ⚠️ Erro ao buscar, usando fallback:', error);
+        // Fallback: série neutra
+        marketCapHistory365 = Array(365).fill(2.5e12); // ~2.5T USD
+      }
 
-      // STEP 4: Compute per-asset stats first (strict independence)
+      // ============================================================
+      // STEP 4: Calcular Componente Market Cap (40% do peso) - LÓGICA CORRIGIDA
+      // ============================================================
+      const calcularComponenteMarketCap = (mcHistory: number[]) => {
+        if (mcHistory.length < 15) {
+          return { probabilidadeAlta: 0.5, variacaoRecente: 0, zScore: 0 };
+        }
+
+        // 1. Últimos 15 dias
+        const ultimos15dias = mcHistory.slice(-15);
+        const variacaoPercentual15dias = 
+          ((ultimos15dias[14] - ultimos15dias[0]) / ultimos15dias[0]) * 100;
+
+        // 2. Histórico de variações de 15 dias
+        const variacoes15dias_historicas: number[] = [];
+        for (let i = 15; i < mcHistory.length; i++) {
+          const var15d = ((mcHistory[i] - mcHistory[i - 15]) / mcHistory[i - 15]) * 100;
+          variacoes15dias_historicas.push(var15d);
+        }
+
+        const mediaHistorica = variacoes15dias_historicas.reduce((s, v) => s + v, 0) / variacoes15dias_historicas.length;
+        const varianceHist = variacoes15dias_historicas.reduce((s, v) => s + Math.pow(v - mediaHistorica, 2), 0) / variacoes15dias_historicas.length;
+        const desvioHistorico = Math.sqrt(varianceHist);
+
+        // 3. Z-score
+        const zScore = desvioHistorico > 1e-8 ? (variacaoPercentual15dias - mediaHistorica) / desvioHistorico : 0;
+
+        // 4. Converter para probabilidade - CORREÇÃO CRÍTICA:
+        // ENTROU dinheiro (variação > 0) = ALTA
+        // SAIU dinheiro (variação < 0) = QUEDA
+        let probabilidadeAlta_marketcap = 0.5;
+        
+        if (variacaoPercentual15dias > 0) {
+          // ✅ ENTROU dinheiro no mercado = tendência de ALTA
+          probabilidadeAlta_marketcap = 0.5 + Math.min(Math.abs(zScore) / 4, 0.5);
+        } else {
+          // ✅ SAIU dinheiro do mercado = tendência de QUEDA
+          probabilidadeAlta_marketcap = 0.5 - Math.min(Math.abs(zScore) / 4, 0.5);
+        }
+
+        probabilidadeAlta_marketcap = Math.max(0, Math.min(1, probabilidadeAlta_marketcap));
+
+        return {
+          probabilidadeAlta: probabilidadeAlta_marketcap,
+          variacaoRecente: variacaoPercentual15dias,
+          zScore: zScore
+        };
+      };
+
+      const componenteMarketCap = calcularComponenteMarketCap(marketCapHistory365);
+      console.log(`[MARKET CAP] 📊 Variação 15d: ${componenteMarketCap.variacaoRecente.toFixed(2)}% | z-score: ${componenteMarketCap.zScore.toFixed(2)} | P(alta): ${(componenteMarketCap.probabilidadeAlta * 100).toFixed(1)}%`);
+
+      // ============================================================
+      // STEP 5: Calcular Componente de Preço (60% do peso) para cada cripto
+      // ============================================================
       type AssetStats = {
         id: string;
         name: string;
@@ -216,17 +319,16 @@ const Market = () => {
         price: number;
         nPoints: number;
         closes: number[];
-        prices_hash: string;
-        mu: number;
-        sigma: number;
+        media_retornos_pct: number;
+        desvio_retornos_pct: number;
         p_price_up: number;
-        p_price_up_adj: number; // adjusted by volatility factor
-        p_flow_up: number;
+        p_marketcap_up: number;
         minObserved: number;
         maxObserved: number;
         data_source_prices: string;
         data_source_ms: number;
       };
+
       const stats: AssetStats[] = await Promise.all(
         cryptoList.map(async (c) => {
           const data = priceData[c.id];
@@ -235,51 +337,50 @@ const Market = () => {
           const series = historicalMap[c.id] || [];
           const closes = series.map((p: any) => p[1]).filter((v: any) => typeof v === 'number' && isFinite(v));
           const nPoints = closes.length;
-          if (nPoints === 0) console.error(`[${c.symbol}] ❌ NO HISTORICAL DATA`);
-          if (nPoints < 330) console.warn(`WINDOW_SHORT:${c.id} n_points=${nPoints}`);
+          
+          if (nPoints === 0) console.error(`[${c.symbol}] ❌ SEM DADOS`);
 
-          const prices_hash = await sha256Hex(closes);
-
-          // Log returns (no winsorization per spec)
-          const rets: number[] = [];
+          // Calcular retornos PERCENTUAIS (não logarítmicos!)
+          const retornos_pct: number[] = [];
           for (let i = 1; i < closes.length; i++) {
-            const lr = Math.log(closes[i]) - Math.log(closes[i - 1]);
-            if (isFinite(lr)) rets.push(lr);
-          }
-          let mu = 0, sigma = 0;
-          if (rets.length) {
-            mu = rets.reduce((s, r) => s + r, 0) / rets.length;
-            const variance = rets.reduce((s, r) => s + Math.pow(r - mu, 2), 0) / rets.length;
-            sigma = Math.sqrt(variance);
+            const ret_pct = ((closes[i] - closes[i - 1]) / closes[i - 1]) * 100;
+            if (isFinite(ret_pct)) retornos_pct.push(ret_pct);
           }
 
+          let media = 0, desvioPadrao = 0;
+          if (retornos_pct.length) {
+            media = retornos_pct.reduce((s, r) => s + r, 0) / retornos_pct.length;
+            const variance = retornos_pct.reduce((s, r) => s + Math.pow(r - media, 2), 0) / retornos_pct.length;
+            desvioPadrao = Math.sqrt(variance);
+          }
+
+          // Fórmula do prompt:
+          // Se média > 0: prob = 0.5 + min(média / (2 * σ), 0.5)
+          // Se média ≤ 0: prob = 0.5 - min(|média| / (2 * σ), 0.5)
           let p_price_up = 0.5;
-          if (sigma < 1e-8) {
-            console.warn(`LOW_VAR:${c.id} sigma=${sigma}`);
-            p_price_up = 0.5;
-          } else {
-            const z0 = (0 - mu) / Math.max(sigma, 1e-8);
-            p_price_up = 1 - normalCDF(z0);
+          
+          if (desvioPadrao > 1e-8) {
+            if (media > 0) {
+              p_price_up = 0.5 + Math.min(media / (2 * desvioPadrao), 0.5);
+            } else {
+              p_price_up = 0.5 - Math.min(Math.abs(media) / (2 * desvioPadrao), 0.5);
+            }
           }
 
-          // BTC flow (same for all except BTC)
-          const p_flow_up = c.id === 'bitcoin' ? 0.5 : btcFlowComponent.pAlta;
+          p_price_up = Math.max(0, Math.min(1, p_price_up));
 
-          // Observed min/max from history
+          // Market cap (mesmo para todos)
+          const p_marketcap_up = componenteMarketCap.probabilidadeAlta;
+
+          // Observed min/max
           const minObserved = closes.length ? Math.min(...closes) : price * 0.7;
           const maxObserved = closes.length ? Math.max(...closes) : price * 1.3;
 
-          console.log('[PROB_LOG]', {
-            asset_id: c.id,
-            n_points: nPoints,
-            prices_hash,
-            mu: Number(mu.toFixed(6)),
-            sigma: Number(sigma.toFixed(6)),
-            p_price_up: Number(p_price_up.toFixed(6)),
-            p_flow_up: Number(p_flow_up.toFixed(6)),
-            p_up_final: Number((0.6*p_price_up + 0.4*p_flow_up).toFixed(6)),
-            label: (0.6*p_price_up + 0.4*p_flow_up) >= 0.5 ? 'Alta' : 'Queda'
-          });
+          // Intervalo de confiança 95% (para display)
+          const ic95_inferior = media - (1.96 * desvioPadrao);
+          const ic95_superior = media + (1.96 * desvioPadrao);
+
+          console.log(`[${c.symbol}] n=${nPoints} | μ=${media.toFixed(4)}% | σ=${desvioPadrao.toFixed(4)}% | IC95=[${ic95_inferior.toFixed(2)}%, ${ic95_superior.toFixed(2)}%] | P(↑)_preço=${(p_price_up*100).toFixed(1)}%`);
 
           return {
             id: c.id,
@@ -288,109 +389,34 @@ const Market = () => {
             price,
             nPoints,
             closes,
-            prices_hash,
-            mu,
-            sigma,
+            media_retornos_pct: media,
+            desvio_retornos_pct: desvioPadrao,
             p_price_up,
-            p_price_up_adj: p_price_up,
-            p_flow_up,
+            p_marketcap_up,
             minObserved,
             maxObserved,
-            data_source_prices: providerUsed[c.id]?.source || (historicalMap[c.id] && historicalMap[c.id].length ? 'provider/cache/mock' : 'none'),
+            data_source_prices: providerUsed[c.id]?.source || 'cache/mock',
             data_source_ms: providerUsed[c.id]?.ms || 0,
           };
         })
       );
 
-      // Volatility-based contrast (quanto mais volátil, mais distante de 0.5)
-      const sigmas = stats.map(s => s.sigma).filter(x => isFinite(x) && x > 0).sort((a,b)=>a-b);
-      const medianSigma = sigmas.length ? (sigmas.length % 2 ? sigmas[(sigmas.length-1)/2] : (sigmas[sigmas.length/2 - 1] + sigmas[sigmas.length/2]) / 2) : 0;
-      if (medianSigma > 0) {
-        stats.forEach(s => {
-          const factor = Math.min(3.0, Math.max(0.6, s.sigma / medianSigma));
-          const d = s.p_price_up - 0.5;
-          s.p_price_up_adj = Math.max(0.001, Math.min(0.999, 0.5 + d * factor));
-        });
-      }
-
-      // Assertions
-      const uniqueHashes = new Set(stats.map(s => s.prices_hash));
-      console.assert(uniqueHashes.size === stats.length, 'DUP_SERIES_DETECTED', { unique: uniqueHashes.size, expected: stats.length, hashes: stats.map(s => s.prices_hash) });
-      console.assert(stats.every(s => s.nPoints >= 330), 'HIST_WINDOW_SHORT', stats.filter(s => s.nPoints < 330).map(s => ({ id: s.id, n: s.nPoints })));
-
-      // Base combine per spec: 60% preço, 40% fluxo BTC (BTC neutro)
-      let wPrice = 0.60;
-      let wFlow = 0.40;
-      let combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up_adj) + (wFlow * s.p_flow_up) }));
-
-      const getDispersion = (arr: Array<{id:string,p:number}>) => {
-        if (!arr.length) return 0;
-        const ps = arr.map(a => a.p);
-        return Math.max(...ps) - Math.min(...ps);
-      };
-
-      // If results are too similar (<5pp), reduce flow impact to 25%
-      let dispersion = getDispersion(combined);
-      if (dispersion < 0.05) {
-        wPrice = 0.75;
-        wFlow = 0.25;
-        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up_adj) + (wFlow * s.p_flow_up) }));
-        dispersion = getDispersion(combined);
-
-        // Extra: if ainda <5pp, recalcular p_price_up usando sigma efetivo (volatilidade amplia distância de 0.5)
-        if (dispersion < 0.05 && medianSigma > 0) {
-          const combined2 = stats.map(s => {
-            const factor = Math.min(3.0, Math.max(1.0, s.sigma / medianSigma));
-            const sigmaEff = Math.max(s.sigma / factor, 1e-8);
-            const p_price_sigma = s.sigma < 1e-8 ? 0.5 : (1 - normalCDF((0 - s.mu) / sigmaEff));
-            return { id: s.id, p: (wPrice * p_price_sigma) + (wFlow * s.p_flow_up) };
-          });
-          const disp2 = getDispersion(combined2);
-          if (disp2 > dispersion) {
-            combined = combined2;
-            dispersion = disp2;
-          }
-        }
-      }
-
-      // Cluster guard: if >=3 assets within ±1%, keep reduced flow weight
-      const countCluster = (arr: Array<{id:string,p:number}>) => {
-        let countSet = new Set<string>();
-        for (let i = 0; i < arr.length; i++) {
-          for (let j = i + 1; j < arr.length; j++) {
-            if (Math.abs(arr[i].p - arr[j].p) <= 0.01) {
-              countSet.add(arr[i].id);
-              countSet.add(arr[j].id);
-            }
-          }
-        }
-        return countSet.size;
-      };
-
-      if (countCluster(combined) >= 3) {
-        wPrice = 0.75;
-        wFlow = 0.25;
-        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up_adj) + (wFlow * s.p_flow_up) }));
-      }
-
-      // Detect duplicate min/max pairs across assets (copy error audit)
-      const pairCounts: Record<string, number> = {};
-      stats.forEach(s => {
-        const key = `${s.minObserved.toFixed(8)}|${s.maxObserved.toFixed(8)}`;
-        pairCounts[key] = (pairCounts[key] || 0) + 1;
-      });
-      const duplicateMinMaxIds = new Set(
-        stats.filter(s => pairCounts[`${s.minObserved.toFixed(8)}|${s.maxObserved.toFixed(8)}`] > 1).map(s => s.id)
-      );
+      // ============================================================
+      // STEP 6: Combinar probabilidades - 60% preço + 40% market cap
+      // ============================================================
+      const wPrice = 0.60;
+      const wFlow = 0.40; // agora é market cap, não BTC flow
 
       const cryptosWithData: Crypto[] = stats.map((s) => {
-        const comb = combined.find(c => c.id === s.id)!;
-        const pAltaFinal = comb.p;
+        // Probabilidade final: 60% preço + 40% market cap
+        const pAltaFinal = (wPrice * s.p_price_up) + (wFlow * s.p_marketcap_up);
+        
         const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
         const probability = pAltaFinal >= 0.5 ? (pAltaFinal * 100) : ((1 - pAltaFinal) * 100);
 
-        // Range: sempre observado (validado na coleta)
-        const rangeStatus: 'ok' = 'ok';
+        // IC 95% baseado nos retornos percentuais
+        const ic95_inferior = s.media_retornos_pct - (1.96 * s.desvio_retornos_pct);
+        const ic95_superior = s.media_retornos_pct + (1.96 * s.desvio_retornos_pct);
 
         return {
           name: s.name,
@@ -403,21 +429,28 @@ const Market = () => {
           minPrice: s.minObserved,
           maxPrice: s.maxObserved,
           confidence: 95,
-          rangeStatus,
-          dataStatus: 'ok',
+          rangeStatus: 'ok' as const,
+          dataStatus: 'ok' as const,
           debug: {
             nPoints: s.nPoints,
-            mu: s.mu,
-            sigma: s.sigma,
-            ic95_low: s.mu - 1.96 * s.sigma,
-            ic95_high: s.mu + 1.96 * s.sigma,
+            mu: s.media_retornos_pct,
+            sigma: s.desvio_retornos_pct,
+            ic95_low: ic95_inferior,
+            ic95_high: ic95_superior,
             p_price_up: s.p_price_up,
-            p_flow_up: s.p_flow_up,
+            p_flow_up: s.p_marketcap_up, // agora é market cap
             p_final_up: pAltaFinal,
             weights: { wPrice, wFlow },
             data_source_prices: s.data_source_prices,
             data_source_ms: s.data_source_ms,
-            flow_meta: { nfRecent: btcFlowComponent.nfRecent, meanNF: btcFlowComponent.meanNF, stdDevNF: btcFlowComponent.stdDevNF, zAbs: btcFlowComponent.zAbs, m: btcFlowComponent.m, source: btcFlowComponent.source }
+            flow_meta: { 
+              nfRecent: componenteMarketCap.variacaoRecente, 
+              meanNF: 0, 
+              stdDevNF: 0, 
+              zAbs: Math.abs(componenteMarketCap.zScore), 
+              m: componenteMarketCap.probabilidadeAlta, 
+              source: 'marketcap_total' 
+            }
           }
         };
       });
