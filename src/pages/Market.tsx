@@ -149,7 +149,7 @@ const Market = () => {
       const btcFlowComponent = calculateBTCFlowComponent(historicalMap['bitcoin'] || []);
       console.log(`[BTC_FLOW] p_alta=${btcFlowComponent.pAlta.toFixed(3)}, p_queda=${btcFlowComponent.pQueda.toFixed(3)}`);
 
-      // STEP 4: Process each crypto independently
+      // STEP 4: Process each crypto independently with DETAILED LOGGING
       const cryptosWithData: Crypto[] = cryptoList.map(crypto => {
         const data = priceData[crypto.id];
         const price = data?.usd || 0;
@@ -160,6 +160,12 @@ const Market = () => {
         // CRITICAL: Use ONLY this asset's historical data (no shared variables!)
         const historicalPricesData = historicalMap[crypto.id] || [];
         
+        // ==================== VALIDATION CHECK ====================
+        if (historicalPricesData.length === 0) {
+          console.error(`[${crypto.symbol}] ❌ NO HISTORICAL DATA - this should never happen!`);
+        }
+        // ==========================================================
+        
         let minPrice = price * 0.70;
         let maxPrice = price * 1.30;
         let pAltaPreco = 0.5;
@@ -167,12 +173,18 @@ const Market = () => {
         let mean = 0;
         let stdDev = 0;
         let nPoints = 0;
+        let firstPrice = 0;
+        let lastPrice = 0;
 
         // Component 1: Price-based probability (60% weight) - INDEPENDENT per asset
         if (historicalPricesData.length > 30) {
           // Extract ONLY this asset's prices (365 days daily close)
           const assetPrices = historicalPricesData.map((p: any) => p[1]);
           nPoints = assetPrices.length;
+          firstPrice = assetPrices[0];
+          lastPrice = assetPrices[assetPrices.length - 1];
+          
+          console.log(`[${crypto.symbol}] 📊 Data range: ${nPoints} points, first=${firstPrice.toFixed(6)}, last=${lastPrice.toFixed(6)}, current=${price.toFixed(6)}`);
           
           // Calculate log returns for THIS asset ONLY
           const assetReturns: number[] = [];
@@ -189,6 +201,8 @@ const Market = () => {
             const variance = assetReturns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / assetReturns.length;
             stdDev = Math.sqrt(variance);
 
+            console.log(`[${crypto.symbol}] 📈 Returns: n=${assetReturns.length}, μ=${mean.toFixed(8)}, σ=${stdDev.toFixed(8)}`);
+
             // Confidence interval 95%
             const ic95Lower = mean - 1.96 * stdDev;
             const ic95Upper = mean + 1.96 * stdDev;
@@ -197,12 +211,14 @@ const Market = () => {
             minPrice = Math.max(0, price * Math.exp(ic95Lower * 30)); // ~1 month projection
             maxPrice = price * Math.exp(ic95Upper * 30);
 
+            console.log(`[${crypto.symbol}] 📉 IC95%: [${ic95Lower.toFixed(8)}, ${ic95Upper.toFixed(8)}] → prices [${minPrice.toFixed(6)}, ${maxPrice.toFixed(6)}]`);
+
             // Probability calculation with sanity check
             const epsilon = 1e-8;
             
             // Low variance check - force neutral if asset has very low volatility
             if (stdDev < epsilon) {
-              console.debug(`[${crypto.symbol}] LOW_VARIANCE_ASSET - forcing neutral probability`);
+              console.warn(`[${crypto.symbol}] ⚠️ LOW_VARIANCE_ASSET (σ=${stdDev}) - forcing neutral probability`);
               pAltaPreco = 0.5;
               pQuedaPreco = 0.5;
             } else {
@@ -210,10 +226,12 @@ const Market = () => {
               const zScore = (0 - mean) / (stdDev + epsilon);
               pQuedaPreco = normalCDF(zScore);
               pAltaPreco = 1 - pQuedaPreco;
+              
+              console.log(`[${crypto.symbol}] 🎲 Z-score=${zScore.toFixed(4)}, Φ(z)=${pQuedaPreco.toFixed(4)} → p_alta_preço=${pAltaPreco.toFixed(4)}`);
             }
           }
         } else {
-          console.warn(`[${crypto.symbol}] Insufficient data (${historicalPricesData.length} points) - using neutral probabilities`);
+          console.warn(`[${crypto.symbol}] ⚠️ Insufficient data (${historicalPricesData.length} points) - using neutral probabilities`);
         }
 
         // Component 2: BTC flow component (40% weight) - SAME for all except BTC
@@ -224,17 +242,23 @@ const Market = () => {
           // For BTC itself, use neutral flow to avoid circularity
           pAltaFluxo = 0.5;
           pQuedaFluxo = 0.5;
+          console.log(`[${crypto.symbol}] 🔄 BTC self-reference: p_alta_fluxo=NEUTRAL (0.5)`);
         } else {
           pAltaFluxo = btcFlowComponent.pAlta;
           pQuedaFluxo = btcFlowComponent.pQueda;
+          console.log(`[${crypto.symbol}] 🔄 BTC flow: p_alta_fluxo=${pAltaFluxo.toFixed(4)}`);
         }
 
         // Final weighted probability: 60% price + 40% BTC flow
         const pAltaFinal = 0.60 * pAltaPreco + 0.40 * pAltaFluxo;
         const pQuedaFinal = 1 - pAltaFinal;
 
-        // Debug log per asset
-        console.debug(`[${crypto.symbol}] μ=${mean.toFixed(6)}, σ=${stdDev.toFixed(6)}, p_price_up=${pAltaPreco.toFixed(3)}, p_flow_up=${pAltaFluxo.toFixed(3)}, p_final_up=${pAltaFinal.toFixed(3)}, n=${nPoints}`);
+        // COMPREHENSIVE DEBUG LOG
+        console.log(`[${crypto.symbol}] ✅ FINAL CALC:
+  - Component PREÇO (60%): p_alta=${pAltaPreco.toFixed(4)} → contribui ${(0.60 * pAltaPreco).toFixed(4)}
+  - Component FLUXO (40%): p_alta=${pAltaFluxo.toFixed(4)} → contribui ${(0.40 * pAltaFluxo).toFixed(4)}
+  - RESULTADO: p_alta_final=${pAltaFinal.toFixed(4)} (${(pAltaFinal * 100).toFixed(1)}%)
+  - RÓTULO: ${pAltaFinal >= 0.5 ? 'ALTA ⬆️' : 'QUEDA ⬇️'}`);
 
         // Determine label and probability
         const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
@@ -254,8 +278,10 @@ const Market = () => {
         };
       });
 
-      console.log(`[MARKET] Successfully processed ${cryptosWithData.length} cryptos`);
+      console.log(`[MARKET] ✅ Successfully processed ${cryptosWithData.length} cryptos`);
+      console.log(`[MARKET] 📊 Probability distribution:`, cryptosWithData.map(c => `${c.symbol}=${c.probability}%`).join(', '));
       setCryptos(cryptosWithData);
+      
       
     } catch (error) {
       console.error('[MARKET] CRITICAL ERROR - falling back to full mock data:', error);
