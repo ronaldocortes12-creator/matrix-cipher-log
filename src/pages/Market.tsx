@@ -288,15 +288,26 @@ const Market = () => {
         })
       );
 
+      // Volatility-based contrast (quanto mais volátil, mais distante de 0.5)
+      const sigmas = stats.map(s => s.sigma).filter(x => isFinite(x) && x > 0).sort((a,b)=>a-b);
+      const medianSigma = sigmas.length ? (sigmas.length % 2 ? sigmas[(sigmas.length-1)/2] : (sigmas[sigmas.length/2 - 1] + sigmas[sigmas.length/2]) / 2) : 0;
+      if (medianSigma > 0) {
+        stats.forEach(s => {
+          const factor = Math.min(3.0, Math.max(0.6, s.sigma / medianSigma));
+          const d = s.p_price_up - 0.5;
+          s.p_price_up_adj = Math.max(0.001, Math.min(0.999, 0.5 + d * factor));
+        });
+      }
+
       // Assertions
       const uniqueHashes = new Set(stats.map(s => s.prices_hash));
       console.assert(uniqueHashes.size === stats.length, 'DUP_SERIES_DETECTED', { unique: uniqueHashes.size, expected: stats.length, hashes: stats.map(s => s.prices_hash) });
       console.assert(stats.every(s => s.nPoints >= 330), 'HIST_WINDOW_SHORT', stats.filter(s => s.nPoints < 330).map(s => ({ id: s.id, n: s.nPoints })));
 
-      // Base combine per spec: 60% price, 40% BTC flow (BTC flow neutral for BTC)
+      // Base combine per spec: 60% preço, 40% fluxo BTC (BTC neutro)
       let wPrice = 0.60;
       let wFlow = 0.40;
-      let combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up) + (wFlow * s.p_flow_up) }));
+      let combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up_adj) + (wFlow * s.p_flow_up) }));
 
       const getDispersion = (arr: Array<{id:string,p:number}>) => {
         if (!arr.length) return 0;
@@ -309,7 +320,23 @@ const Market = () => {
       if (dispersion < 0.05) {
         wPrice = 0.75;
         wFlow = 0.25;
-        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up) + (wFlow * s.p_flow_up) }));
+        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up_adj) + (wFlow * s.p_flow_up) }));
+        dispersion = getDispersion(combined);
+
+        // Extra: if ainda <5pp, recalcular p_price_up usando sigma efetivo (volatilidade amplia distância de 0.5)
+        if (dispersion < 0.05 && medianSigma > 0) {
+          const combined2 = stats.map(s => {
+            const factor = Math.min(3.0, Math.max(1.0, s.sigma / medianSigma));
+            const sigmaEff = Math.max(s.sigma / factor, 1e-8);
+            const p_price_sigma = s.sigma < 1e-8 ? 0.5 : (1 - normalCDF((0 - s.mu) / sigmaEff));
+            return { id: s.id, p: (wPrice * p_price_sigma) + (wFlow * s.p_flow_up) };
+          });
+          const disp2 = getDispersion(combined2);
+          if (disp2 > dispersion) {
+            combined = combined2;
+            dispersion = disp2;
+          }
+        }
       }
 
       // Cluster guard: if >=3 assets within ±1%, keep reduced flow weight
