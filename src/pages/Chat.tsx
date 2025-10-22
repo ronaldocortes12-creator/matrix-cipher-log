@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Send } from "lucide-react";
+import { Send, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabBar } from "@/components/TabBar";
@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import jeffAvatar from "@/assets/jeff-wu-avatar.png";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type Message = {
   id: number;
@@ -33,8 +34,10 @@ const Chat = () => {
   const [isSending, setIsSending] = useState(false);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     initializeChat();
@@ -444,14 +447,38 @@ const Chat = () => {
       <MatrixRain />
       <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
       
+      {/* Toggle Button */}
+      <Button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="fixed top-4 left-4 z-30 glass-effect hover:bg-primary/20 border border-primary/30 transition-all duration-300"
+        size="icon"
+      >
+        {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </Button>
+
       {/* Sidebar */}
-      <div className="relative z-10">
+      <div className={`
+        relative z-20 transition-all duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isMobile ? 'absolute left-0 top-0 h-full shadow-2xl' : ''}
+      `}>
         <ChatSidebar
           lessons={lessons}
           activeLessonId={activeLessonId}
-          onSelectLesson={handleSelectLesson}
+          onSelectLesson={(lessonId) => {
+            handleSelectLesson(lessonId);
+            if (isMobile) setIsSidebarOpen(false);
+          }}
         />
       </div>
+
+      {/* Overlay for mobile */}
+      {isMobile && isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-10"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col relative z-10">
