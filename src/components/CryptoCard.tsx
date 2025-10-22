@@ -85,7 +85,7 @@ export const CryptoCard = ({
           </span>
         </div>
         {dataStatus === 'insufficient' && (
-          <div className="text-xs text-yellow-500">Dados insuficientes (janela < 330 dias)</div>
+          <div className="text-xs text-yellow-500">Dados insuficientes (janela {'<'} 330 dias)</div>
         )}
       </div>
 

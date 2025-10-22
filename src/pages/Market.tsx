@@ -13,7 +13,7 @@ type Crypto = {
   price: number;
   trend: "up" | "down";
   probabilityType: "Alta" | "Queda";
-  probability: number; // percent, not rounded here
+  probability: number;
   minPrice: number;
   maxPrice: number;
   confidence: number;
@@ -87,7 +87,7 @@ const Market = () => {
         priceData = mockCurrentPrices;
       }
 
-      // STEP 2: Fetch historical data with cache + rate limiting
+      // STEP 2: Fetch historical data with cache + rate limiting + provider fallback
       const historicalMap: Record<string, any[]> = {};
       
       for (const crypto of cryptoList) {
@@ -108,25 +108,9 @@ const Market = () => {
           continue;
         }
 
-        // Fetch with rate limiting + retry
+        // Fetch with rate limiting + retry + provider fallback (CG -> Binance -> Mock)
         try {
-          const prices = await rateLimiter.add(async () => {
-            return await fetchWithRetry(async () => {
-              const response = await fetch(
-                `https://api.coingecko.com/api/v3/coins/${crypto.id}/market_chart?vs_currency=usd&days=365&interval=daily`
-              );
-              
-              if (!response.ok) {
-                if (response.status === 429) {
-                  throw new Error('RATE_LIMITED');
-                }
-                throw new Error(`Historical API failed: ${response.status}`);
-              }
-              
-              const data = await response.json();
-              return data.prices || [];
-            }, 2, 2000); // 2 retries, 2s base delay
-          });
+          const { prices, source, ms } = await rateLimiter.add(async () => fetchHistoricalWithFallback(crypto.id, crypto.symbol));
 
           historicalMap[crypto.id] = prices;
           
@@ -140,9 +124,9 @@ const Market = () => {
             });
           }
           
-          console.log(`[${crypto.symbol}] Fetched ${prices.length} historical data points`);
+          console.log(`[${crypto.symbol}] Fetched ${prices.length} historical data points from ${source} in ${ms.toFixed(0)}ms`);
         } catch (error) {
-          console.warn(`[${crypto.symbol}] Historical fetch failed, using mock:`, error);
+          console.warn(`[${crypto.symbol}] Historical fetch failed across providers, using mock:`, error);
           historicalMap[crypto.id] = mockHistoricalPrices[crypto.id] || [];
           
           // Use mock current price too if needed
@@ -156,137 +140,179 @@ const Market = () => {
       const btcFlowComponent = await getBTCFlowComponentWithCache(historicalMap['bitcoin'] || []);
       console.log(`[BTC_FLOW] p_alta=${btcFlowComponent.pAlta.toFixed(3)}, p_queda=${btcFlowComponent.pQueda.toFixed(3)}`);
 
-      // STEP 4: Process each crypto independently with DETAILED LOGGING
-      const cryptosWithData: Crypto[] = cryptoList.map(crypto => {
-        const data = priceData[crypto.id];
-        const price = data?.usd || 0;
-        const change24h = data?.usd_24h_change || 0;
-        
-        const trend: "up" | "down" = change24h >= 0 ? "up" : "down";
-        
-        // CRITICAL: Use ONLY this asset's historical data (no shared variables!)
-        const historicalPricesData = historicalMap[crypto.id] || [];
-        
-        // ==================== VALIDATION CHECK ====================
-        if (historicalPricesData.length === 0) {
-          console.error(`[${crypto.symbol}] ❌ NO HISTORICAL DATA - this should never happen!`);
-        }
-        // ==========================================================
-        
-        let minPrice = price * 0.70;
-        let maxPrice = price * 1.30;
-        let pAltaPreco = 0.5;
-        let pQuedaPreco = 0.5;
-        let mean = 0;
-        let stdDev = 0;
-        let nPoints = 0;
-        let firstPrice = 0;
-        let lastPrice = 0;
+      // STEP 4: Compute per-asset stats first (strict independence)
+      type AssetStats = {
+        id: string;
+        name: string;
+        symbol: string;
+        price: number;
+        nPoints: number;
+        closes: number[];
+        prices_hash: string;
+        mu: number;
+        sigma: number;
+        p_price_up: number;
+        p_flow_up: number;
+        minObserved: number;
+        maxObserved: number;
+        data_source_prices: string;
+      };
 
-        // Component 1: Price-based probability (60% weight) - INDEPENDENT per asset
-        if (historicalPricesData.length > 30) {
-          // Extract ONLY this asset's prices (365 days daily close)
-          const assetPrices = historicalPricesData.map((p: any) => p[1]);
-          nPoints = assetPrices.length;
-          firstPrice = assetPrices[0];
-          lastPrice = assetPrices[assetPrices.length - 1];
-          
-          console.log(`[${crypto.symbol}] 📊 Data range: ${nPoints} points, first=${firstPrice.toFixed(6)}, last=${lastPrice.toFixed(6)}, current=${price.toFixed(6)}`);
-          
-          // Calculate log returns for THIS asset ONLY
-          const assetReturns: number[] = [];
-          for (let i = 1; i < assetPrices.length; i++) {
-            const logReturn = Math.log(assetPrices[i]) - Math.log(assetPrices[i - 1]);
-            if (isFinite(logReturn)) {
-              assetReturns.push(logReturn);
-            }
+      const stats: AssetStats[] = await Promise.all(
+        cryptoList.map(async (c) => {
+          const data = priceData[c.id];
+          const price = data?.usd || 0;
+
+          const series = historicalMap[c.id] || [];
+          const closes = series.map((p: any) => p[1]).filter((v: any) => typeof v === 'number' && isFinite(v));
+          const nPoints = closes.length;
+          if (nPoints === 0) console.error(`[${c.symbol}] ❌ NO HISTORICAL DATA`);
+          if (nPoints < 330) console.warn(`WINDOW_SHORT:${c.id} n_points=${nPoints}`);
+
+          const prices_hash = await sha256Hex(closes);
+
+          // Log returns with 1% winsorization
+          const rets: number[] = [];
+          for (let i = 1; i < closes.length; i++) {
+            const lr = Math.log(closes[i]) - Math.log(closes[i - 1]);
+            if (isFinite(lr)) rets.push(lr);
+          }
+          const wr = winsorize1pct(rets);
+          let mu = 0, sigma = 0;
+          if (wr.length) {
+            mu = wr.reduce((s, r) => s + r, 0) / wr.length;
+            const variance = wr.reduce((s, r) => s + Math.pow(r - mu, 2), 0) / wr.length;
+            sigma = Math.sqrt(variance);
           }
 
-          if (assetReturns.length > 0) {
-            // Calculate mean and std dev for THIS asset ONLY
-            mean = assetReturns.reduce((sum, r) => sum + r, 0) / assetReturns.length;
-            const variance = assetReturns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / assetReturns.length;
-            stdDev = Math.sqrt(variance);
+          let p_price_up = 0.5;
+          if (sigma < 1e-8) {
+            console.warn(`LOW_VAR:${c.id} sigma=${sigma}`);
+            p_price_up = 0.5;
+          } else {
+            const z0 = (0 - mu) / Math.max(sigma, 1e-8);
+            p_price_up = 1 - normalCDF(z0);
+          }
 
-            console.log(`[${crypto.symbol}] 📈 Returns: n=${assetReturns.length}, μ=${mean.toFixed(8)}, σ=${stdDev.toFixed(8)}`);
+          // BTC flow (same for all except BTC)
+          const p_flow_up = c.id === 'bitcoin' ? 0.5 : btcFlowComponent.pAlta;
 
-            // Confidence interval 95%
-            const ic95Lower = mean - 1.96 * stdDev;
-            const ic95Upper = mean + 1.96 * stdDev;
-            
-            // Convert back to price range
-            minPrice = Math.max(0, price * Math.exp(ic95Lower * 30)); // ~1 month projection
-            maxPrice = price * Math.exp(ic95Upper * 30);
+          // Observed min/max from history
+          const minObserved = closes.length ? Math.min(...closes) : price * 0.7;
+          const maxObserved = closes.length ? Math.max(...closes) : price * 1.3;
 
-            console.log(`[${crypto.symbol}] 📉 IC95%: [${ic95Lower.toFixed(8)}, ${ic95Upper.toFixed(8)}] → prices [${minPrice.toFixed(6)}, ${maxPrice.toFixed(6)}]`);
+          console.log('[PROB_LOG]', {
+            asset_id: c.id,
+            n_points: nPoints,
+            prices_hash,
+            mu: Number(mu.toFixed(6)),
+            sigma: Number(sigma.toFixed(6)),
+            p_price_up: Number(p_price_up.toFixed(6)),
+            p_flow_up: Number(p_flow_up.toFixed(6)),
+            p_up_final: Number((0.6*p_price_up + 0.4*p_flow_up).toFixed(6)),
+            label: (0.6*p_price_up + 0.4*p_flow_up) >= 0.5 ? 'Alta' : 'Queda'
+          });
 
-            // Probability calculation with sanity check
-            const epsilon = 1e-8;
-            
-            // Low variance check - force neutral if asset has very low volatility
-            if (stdDev < epsilon) {
-              console.warn(`[${crypto.symbol}] ⚠️ LOW_VARIANCE_ASSET (σ=${stdDev}) - forcing neutral probability`);
-              pAltaPreco = 0.5;
-              pQuedaPreco = 0.5;
-            } else {
-              // Normal probability calculation
-              const zScore = (0 - mean) / (stdDev + epsilon);
-              pQuedaPreco = normalCDF(zScore);
-              pAltaPreco = 1 - pQuedaPreco;
-              
-              console.log(`[${crypto.symbol}] 🎲 Z-score=${zScore.toFixed(4)}, Φ(z)=${pQuedaPreco.toFixed(4)} → p_alta_preço=${pAltaPreco.toFixed(4)}`);
+          return {
+            id: c.id,
+            name: c.name,
+            symbol: c.symbol,
+            price,
+            nPoints,
+            closes,
+            prices_hash,
+            mu,
+            sigma,
+            p_price_up,
+            p_flow_up,
+            minObserved,
+            maxObserved,
+            data_source_prices: historicalMap[c.id] && historicalMap[c.id].length ? 'provider/cache/mock' : 'none'
+          };
+        })
+      );
+
+      // Assertions
+      const uniqueHashes = new Set(stats.map(s => s.prices_hash));
+      console.assert(uniqueHashes.size === stats.length, 'DUP_SERIES_DETECTED', { unique: uniqueHashes.size, expected: stats.length, hashes: stats.map(s => s.prices_hash) });
+      console.assert(stats.every(s => s.nPoints >= 330), 'HIST_WINDOW_SHORT', stats.filter(s => s.nPoints < 330).map(s => ({ id: s.id, n: s.nPoints })));
+
+      const stdPPrice = (() => {
+        const arr = stats.map(s => s.p_price_up);
+        const m = arr.reduce((a,b)=>a+b,0)/(arr.length||1);
+        return Math.sqrt(arr.reduce((s,v)=>s+Math.pow(v-m,2),0)/(arr.length||1));
+      })();
+      console.assert(stdPPrice > 0.01, 'LOW_VARIANCE_P_PRICE_UP', { stdPPrice });
+
+      // Detect cluster (±1.5%) on initial combine
+      const combine = (wPrice: number, wFlow: number, sigmaFactor = 1) => {
+        return stats.map(s => {
+          let p_price_up = s.p_price_up;
+          if (sigmaFactor !== 1 && s.sigma >= 1e-8) {
+            const z0 = (0 - s.mu) / Math.max(s.sigma * sigmaFactor, 1e-8);
+            p_price_up = 1 - normalCDF(z0);
+          }
+          return ({ id: s.id, p: wPrice * p_price_up + wFlow * s.p_flow_up, p_price_up });
+        });
+      };
+
+      let combined = combine(0.60, 0.40);
+      const clusterAssets = () => {
+        const within = [] as Array<{id:string,p:number}>;
+        for (let i=0;i<combined.length;i++){
+          for (let j=i+1;j<combined.length;j++){
+            if (Math.abs(combined[i].p - combined[j].p) <= 0.015){
+              if (!within.find(w=>w.id===combined[i].id)) within.push(combined[i]);
+              if (!within.find(w=>w.id===combined[j].id)) within.push(combined[j]);
             }
           }
-        } else {
-          console.warn(`[${crypto.symbol}] ⚠️ Insufficient data (${historicalPricesData.length} points) - using neutral probabilities`);
         }
+        return within;
+      };
 
-        // Component 2: BTC flow component (40% weight) - SAME for all except BTC
-        let pAltaFluxo = 0.5;
-        let pQuedaFluxo = 0.5;
-        
-        if (crypto.id === 'bitcoin') {
-          // For BTC itself, use neutral flow to avoid circularity
-          pAltaFluxo = 0.5;
-          pQuedaFluxo = 0.5;
-          console.log(`[${crypto.symbol}] 🔄 BTC self-reference: p_alta_fluxo=NEUTRAL (0.5)`);
-        } else {
-          pAltaFluxo = btcFlowComponent.pAlta;
-          pQuedaFluxo = btcFlowComponent.pQueda;
-          console.log(`[${crypto.symbol}] 🔄 BTC flow: p_alta_fluxo=${pAltaFluxo.toFixed(4)}`);
-        }
+      let cluster = clusterAssets();
+      if (cluster.length >= 4 && stdPPrice > 0.015) {
+        console.warn('RECALIBRATED_WEIGHTS to 0.75/0.25 due to clustering');
+        combined = combine(0.75, 0.25);
+        cluster = clusterAssets();
+      }
+      if (cluster.length >= 4) {
+        console.warn('SIGMA_STRETCH_20P due to persistent clustering');
+        combined = combine(0.75, 0.25, 1.2);
+        cluster = clusterAssets();
+      }
+      if (cluster.length >= 4) {
+        console.warn('TOO_SIMILAR_CLUSTER', cluster);
+      }
 
-        // Final weighted probability: 60% price + 40% BTC flow
-        const pAltaFinal = 0.60 * pAltaPreco + 0.40 * pAltaFluxo;
-        const pQuedaFinal = 1 - pAltaFinal;
-
-        // COMPREHENSIVE DEBUG LOG
-        console.log(`[${crypto.symbol}] ✅ FINAL CALC:
-  - Component PREÇO (60%): p_alta=${pAltaPreco.toFixed(4)} → contribui ${(0.60 * pAltaPreco).toFixed(4)}
-  - Component FLUXO (40%): p_alta=${pAltaFluxo.toFixed(4)} → contribui ${(0.40 * pAltaFluxo).toFixed(4)}
-  - RESULTADO: p_alta_final=${pAltaFinal.toFixed(4)} (${(pAltaFinal * 100).toFixed(1)}%)
-  - RÓTULO: ${pAltaFinal >= 0.5 ? 'ALTA ⬆️' : 'QUEDA ⬇️'}`);
-
-        // Determine label and probability
+      const cryptosWithData: Crypto[] = stats.map((s) => {
+        const comb = combined.find(c => c.id === s.id)!;
+        const pAltaFinal = comb.p;
         const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
-        const probability = pAltaFinal >= 0.5 ? pAltaFinal * 100 : pQuedaFinal * 100;
+        const probability = pAltaFinal >= 0.5 ? (pAltaFinal * 100) : ((1 - pAltaFinal) * 100);
+
+        // Range validation: within 30%..400% of current price and must be observed
+        const inBounds = (s.minObserved >= s.price*0.3) && (s.maxObserved <= s.price*4);
+        const rangeStatus: 'ok' | 'review' = inBounds ? 'ok' : 'review';
 
         return {
-          name: crypto.name,
-          symbol: crypto.symbol,
-          logo: crypto.logo,
-          price,
+          name: s.name,
+          symbol: s.symbol,
+          logo: cryptoList.find(x=>x.id===s.id)!.logo,
+          price: s.price,
           trend: probabilityType === "Alta" ? "up" : "down",
           probabilityType,
-          probability: Number(probability.toFixed(1)),
-          minPrice,
-          maxPrice,
+          probability,
+          minPrice: s.minObserved,
+          maxPrice: s.maxObserved,
           confidence: 95,
+          rangeStatus,
+          dataStatus: s.nPoints >= 330 ? 'ok' : 'insufficient',
         };
       });
 
       console.log(`[MARKET] ✅ Successfully processed ${cryptosWithData.length} cryptos`);
-      console.log(`[MARKET] 📊 Probability distribution:`, cryptosWithData.map(c => `${c.symbol}=${c.probability}%`).join(', '));
+      console.log(`[MARKET] 📊 Probability distribution:`, cryptosWithData.map(c => `${c.symbol}=${c.probability.toFixed(1)}%`).join(', '));
       setCryptos(cryptosWithData);
       
       
@@ -376,28 +402,6 @@ const Market = () => {
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
-  // Kolmogorov-Smirnov test (approx p-value)
-  const ksTestPValue = (a: number[], b: number[]): number => {
-    if (!a.length || !b.length) return 1;
-    const sa = [...a].sort((x, y) => x - y);
-    const sb = [...b].sort((x, y) => x - y);
-    let ia = 0, ib = 0;
-    const values = Array.from(new Set([...sa, ...sb])).sort((x, y) => x - y);
-    let d = 0;
-    for (const v of values) {
-      while (ia < sa.length && sa[ia] <= v) ia++;
-      while (ib < sb.length && sb[ib] <= v) ib++;
-      const fa = ia / sa.length;
-      const fb = ib / sb.length;
-      d = Math.max(d, Math.abs(fa - fb));
-    }
-    const n = sa.length, m = sb.length;
-    const ne = (n * m) / (n + m);
-    // Approximation: p ≈ 2 exp(-2 ne d^2), clamp to [0,1]
-    const p = 2 * Math.exp(-2 * ne * d * d);
-    return Math.max(0, Math.min(1, p));
   };
 
   // Provider fallback helpers
