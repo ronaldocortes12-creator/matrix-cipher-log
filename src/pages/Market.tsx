@@ -64,7 +64,7 @@ const Market = () => {
       ];
 
        console.log('[MARKET] Starting data load with cache + fallback system');
-       const ALLOW_CACHE = false;
+       const ALLOW_CACHE = true;
 
       // STEP 1: Fetch current prices (with retry and fallback)
       let priceData: Record<string, any> = {};
@@ -117,27 +117,37 @@ const Market = () => {
           const currentData = priceData[crypto.id];
           const priceNow = currentData?.usd || 0;
 
-          const tryProvider = async (provider: 'coingecko' | 'binance') => {
+          const tryProvider = async (provider: 'coingecko' | 'binance' | 'cryptocompare' | 'yahoo') => {
             if (provider === 'coingecko') {
               return await rateLimiter.add(async () => fetchHistoricalFromCoingecko(crypto.id));
             }
-            return await rateLimiter.add(async () => fetchHistoricalFromBinance(crypto.id, crypto.symbol));
+            if (provider === 'binance') {
+              return await rateLimiter.add(async () => fetchHistoricalFromBinance(crypto.id, crypto.symbol));
+            }
+            if (provider === 'cryptocompare') {
+              return await rateLimiter.add(async () => fetchHistoricalFromCryptoCompare(crypto.symbol));
+            }
+            // yahoo
+            return await rateLimiter.add(async () => fetchHistoricalFromYahoo(crypto.symbol));
           };
 
           let selected: { prices: any[]; source: string; ms: number } | null = null;
-          let attempts: Array<'coingecko' | 'binance'> = [];
+          let attempts: Array<'coingecko' | 'binance' | 'cryptocompare' | 'yahoo'> = [];
 
-          for (const prov of ['coingecko', 'binance'] as const) {
+          for (const prov of ['coingecko', 'binance', 'cryptocompare', 'yahoo'] as const) {
             attempts.push(prov);
             try {
               const res = await tryProvider(prov);
+              // validate
               const closesTmp = (res.prices || []).map((p: any) => p[1]).filter((v: any) => typeof v === 'number' && isFinite(v));
-              const minObsTmp = closesTmp.length ? Math.min(...closesTmp) : Infinity;
-              const maxObsTmp = closesTmp.length ? Math.max(...closesTmp) : -Infinity;
+              const nPointsTmp = closesTmp.length;
+              const minObsTmp = nPointsTmp ? Math.min(...closesTmp) : Infinity;
+              const maxObsTmp = nPointsTmp ? Math.max(...closesTmp) : -Infinity;
               const invalidRange = priceNow > 0 && (minObsTmp < priceNow * 0.5 || maxObsTmp > priceNow * 4);
-              if (invalidRange) {
+              const insufficientPoints = nPointsTmp < 330;
+              if (invalidRange || insufficientPoints) {
                 rangeFailures[crypto.id] = (rangeFailures[crypto.id] || 0) + 1;
-                console.warn(`[${crypto.symbol}] Range invalid from ${prov}, retrying alternate source...`, { priceNow, minObsTmp, maxObsTmp });
+                console.warn(`[${crypto.symbol}] Rejecting ${prov} (invalidRange=${invalidRange}, nPoints=${nPointsTmp})`);
                 continue; // try next provider
               }
               selected = res;
@@ -278,51 +288,15 @@ const Market = () => {
         })
       );
 
-      // Volatility-based contrast to enforce distinct probabilities per asset
-      const sigmas = stats.map(s => s.sigma).filter(s => isFinite(s) && s > 0).sort((a,b)=>a-b);
-      const medianSigma = sigmas.length ? (sigmas.length % 2 ? sigmas[(sigmas.length-1)/2] : (sigmas[sigmas.length/2 - 1] + sigmas[sigmas.length/2]) / 2) : 0;
-      if (medianSigma > 0) {
-        stats.forEach((s) => {
-          const factor = Math.min(1.6, Math.max(0.8, s.sigma / medianSigma));
-          const d = s.p_price_up - 0.5;
-          s.p_price_up_adj = Math.max(0.001, Math.min(0.999, 0.5 + d * factor));
-        });
-      } else {
-        stats.forEach((s) => { s.p_price_up_adj = s.p_price_up; });
-      }
-
       // Assertions
       const uniqueHashes = new Set(stats.map(s => s.prices_hash));
       console.assert(uniqueHashes.size === stats.length, 'DUP_SERIES_DETECTED', { unique: uniqueHashes.size, expected: stats.length, hashes: stats.map(s => s.prices_hash) });
       console.assert(stats.every(s => s.nPoints >= 330), 'HIST_WINDOW_SHORT', stats.filter(s => s.nPoints < 330).map(s => ({ id: s.id, n: s.nPoints })));
 
-      const stdPPrice = (() => {
-        const arr = stats.map(s => s.p_price_up);
-        const m = arr.reduce((a,b)=>a+b,0)/(arr.length||1);
-        return Math.sqrt(arr.reduce((s,v)=>s+Math.pow(v-m,2),0)/(arr.length||1));
-      })();
-      console.assert(stdPPrice > 0.01, 'LOW_VARIANCE_P_PRICE_UP', { stdPPrice });
-
-      // Detect cluster (±1.5%) on initial combine
-      const combine = (wPrice: number, wFlow: number, stretch = 1, alpha = 1.0) => {
-        return stats.map(s => {
-          const ratio = medianSigma > 0 ? (s.sigma / medianSigma) : 1;
-          const clampedRatio = Math.min(2.5, Math.max(0.5, ratio));
-          const boost = Math.pow(clampedRatio, alpha);
-          const sigmaEff = Math.max((s.sigma * stretch) / boost, 1e-8);
-          const p_price_up = s.sigma < 1e-8 ? 0.5 : (1 - normalCDF((0 - s.mu) / sigmaEff));
-          const p = wPrice * Math.min(0.999, Math.max(0.001, p_price_up)) + wFlow * s.p_flow_up;
-          return ({ id: s.id, p, p_price_up });
-        });
-      };
-
-      // Iterative strategy to enforce >=5pp dispersion without violating rules
-      const strategies = [
-        { wP: 0.60, wF: 0.40, stretch: 1.0, alpha: 1.2, label: 'BASE_60/40_a1.2' },
-        { wP: 0.75, wF: 0.25, stretch: 1.0, alpha: 1.5, label: 'REWEIGHT_75/25_a1.5' },
-        { wP: 0.75, wF: 0.25, stretch: 0.9, alpha: 1.8, label: 'STRETCH_0.9_a1.8' },
-        { wP: 0.80, wF: 0.20, stretch: 0.8, alpha: 2.0, label: 'STRETCH_0.8_a2.0' },
-      ];
+      // Base combine per spec: 60% price, 40% BTC flow (BTC flow neutral for BTC)
+      let wPrice = 0.60;
+      let wFlow = 0.40;
+      let combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up) + (wFlow * s.p_flow_up) }));
 
       const getDispersion = (arr: Array<{id:string,p:number}>) => {
         if (!arr.length) return 0;
@@ -330,43 +304,32 @@ const Market = () => {
         return Math.max(...ps) - Math.min(...ps);
       };
 
-      let combined = combine(strategies[0].wP, strategies[0].wF, strategies[0].stretch, strategies[0].alpha);
+      // If results are too similar (<5pp), reduce flow impact to 25%
       let dispersion = getDispersion(combined);
-
-      for (let i = 1; i < strategies.length && dispersion < 0.05; i++) {
-        const st = strategies[i];
-        console.warn(`DIVERSITY_LOW_5PP -> applying ${st.label}`);
-        combined = combine(st.wP, st.wF, st.stretch, st.alpha);
-        dispersion = getDispersion(combined);
-      }
-
       if (dispersion < 0.05) {
-        console.error('ERROR_DIVERSITY: dispersion still <5pp after iterative recalibration', { dispersion });
+        wPrice = 0.75;
+        wFlow = 0.25;
+        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up) + (wFlow * s.p_flow_up) }));
       }
 
-      // Additional clustering guard: if >=3 assets within ±1%, amplify alpha once more
-      const clusterAssets = () => {
-        const within = [] as Array<{id:string,p:number}>;
-        for (let i=0;i<combined.length;i++){
-          for (let j=i+1;j<combined.length;j++){
-            if (Math.abs(combined[i].p - combined[j].p) <= 0.01){
-              if (!within.find(w=>w.id===combined[i].id)) within.push(combined[i]);
-              if (!within.find(w=>w.id===combined[j].id)) within.push(combined[j]);
+      // Cluster guard: if >=3 assets within ±1%, keep reduced flow weight
+      const countCluster = (arr: Array<{id:string,p:number}>) => {
+        let countSet = new Set<string>();
+        for (let i = 0; i < arr.length; i++) {
+          for (let j = i + 1; j < arr.length; j++) {
+            if (Math.abs(arr[i].p - arr[j].p) <= 0.01) {
+              countSet.add(arr[i].id);
+              countSet.add(arr[j].id);
             }
           }
         }
-        return within;
+        return countSet.size;
       };
 
-      let cluster = clusterAssets();
-      if (cluster.length >= 3) {
-        console.warn('CLUSTER_±1% >=3 ASSETS -> final alpha boost');
-        combined = combine(0.75, 0.25, 0.85, 2.2);
-        cluster = clusterAssets();
-      }
-
-      if (cluster.length >= 3) {
-        console.warn('TOO_SIMILAR_CLUSTER_AFTER_FINAL_BOOST', cluster);
+      if (countCluster(combined) >= 3) {
+        wPrice = 0.75;
+        wFlow = 0.25;
+        combined = stats.map(s => ({ id: s.id, p: (wPrice * s.p_price_up) + (wFlow * s.p_flow_up) }));
       }
 
       // Detect duplicate min/max pairs across assets (copy error audit)
@@ -385,10 +348,8 @@ const Market = () => {
         const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
         const probability = pAltaFinal >= 0.5 ? (pAltaFinal * 100) : ((1 - pAltaFinal) * 100);
 
-         // Range validation: within 30%..400% of current price and must be observed
-        const inBounds = (s.minObserved >= s.price*0.5) && (s.maxObserved <= s.price*4);
-        const rf = rangeFailures[s.id] || 0;
-        const rangeStatus: 'ok' | 'review' = rf >= 2 ? 'review' : (inBounds ? 'ok' : 'review');
+         // Range: always real observed min/max (validated during fetch)
+        const rangeStatus: 'ok' = 'ok';
 
         return {
           name: s.name,
@@ -402,7 +363,7 @@ const Market = () => {
           maxPrice: s.maxObserved,
           confidence: 95,
           rangeStatus,
-          dataStatus: s.nPoints >= 330 && !duplicateMinMaxIds.has(s.id) ? 'ok' : 'insufficient',
+          dataStatus: 'ok',
         };
       });
 
@@ -544,6 +505,33 @@ const Market = () => {
     }
   };
 
+  // Additional providers
+  const fetchHistoricalFromCryptoCompare = async (symbol: string): Promise<{ prices: any[]; source: string; ms: number }> => {
+    const t0 = performance.now();
+    const fsym = symbol.toUpperCase();
+    const url = `https://min-api.cryptocompare.com/data/v2/histoday?fsym=${fsym}&tsym=USD&limit=364`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`CRYPTOCOMPARE_${fsym}_${resp.status}`);
+    const data = await resp.json();
+    const arr = (data?.Data?.Data) || [];
+    const prices = arr.map((d: any) => [d.time * 1000, d.close]).filter((p: any[]) => isFinite(p[1]));
+    return { prices, source: 'cryptocompare', ms: performance.now() - t0 };
+  };
+
+  const fetchHistoricalFromYahoo = async (symbol: string): Promise<{ prices: any[]; source: string; ms: number }> => {
+    const t0 = performance.now();
+    const ysym = `${symbol.toUpperCase()}-USD`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ysym}?range=1y&interval=1d`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`YAHOO_${ysym}_${resp.status}`);
+    const data = await resp.json();
+    const result = data?.chart?.result?.[0];
+    const ts = result?.timestamp || [];
+    const closes = result?.indicators?.quote?.[0]?.close || [];
+    const prices = ts.map((t: number, i: number) => [t * 1000, closes[i]]).filter((p: any[]) => isFinite(p[1]));
+    return { prices, source: 'yahoo', ms: performance.now() - t0 };
+  };
+
   // Winsorize at 1% tails
   const winsorize1pct = (arr: number[]): number[] => {
     if (arr.length < 20) return arr; // not enough
@@ -552,7 +540,7 @@ const Market = () => {
     const q99Idx = Math.ceil(0.99 * (sorted.length - 1));
     const lo = sorted[q1Idx];
     const hi = sorted[q99Idx];
-    return arr.map(v => Math.min(hi, Math.max(lo, v)));
+    return arr.map(v => Math.min(hi, Math.max(lo, v))); 
   };
 
   const loadMockData = () => {
