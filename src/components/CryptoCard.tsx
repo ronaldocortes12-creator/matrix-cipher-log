@@ -12,6 +12,8 @@ type CryptoCardProps = {
   minPrice: number;
   maxPrice: number;
   confidence: number;
+  rangeStatus?: 'ok' | 'review';
+  dataStatus?: 'ok' | 'insufficient';
 };
 
 export const CryptoCard = ({
@@ -25,6 +27,8 @@ export const CryptoCard = ({
   minPrice,
   maxPrice,
   confidence,
+  rangeStatus,
+  dataStatus,
 }: CryptoCardProps) => {
   return (
     <div className="glass-effect rounded-xl p-5 border border-primary/20 hover:border-primary/40 transition-all duration-300 group">
@@ -80,6 +84,9 @@ export const CryptoCard = ({
             {probability.toFixed(1)}%
           </span>
         </div>
+        {dataStatus === 'insufficient' && (
+          <div className="text-xs text-yellow-500">Dados insuficientes (janela < 330 dias)</div>
+        )}
       </div>
 
       {/* Price Range */}
@@ -87,33 +94,39 @@ export const CryptoCard = ({
         <div className="text-xs text-muted-foreground font-medium mb-2">
           Range de Preço (IC 95%)
         </div>
-        <div className="flex justify-between text-sm">
-          <div>
-            <div className="text-muted-foreground text-xs">Mínimo</div>
-            <div className="font-semibold text-foreground">
-              ${minPrice < 0.01 
-                ? minPrice.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
-                : minPrice < 1
-                ? minPrice.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
-                : minPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-              }
+        {rangeStatus === 'review' ? (
+          <div className="text-xs text-yellow-500">Faixa em revisão</div>
+        ) : (
+          <>
+            <div className="flex justify-between text-sm">
+              <div>
+                <div className="text-muted-foreground text-xs">Mínimo</div>
+                <div className="font-semibold text-foreground">
+                  ${minPrice < 0.01 
+                    ? minPrice.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
+                    : minPrice < 1
+                    ? minPrice.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+                    : minPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  }
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-muted-foreground text-xs">Máximo</div>
+                <div className="font-semibold text-foreground">
+                  ${maxPrice < 0.01 
+                    ? maxPrice.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
+                    : maxPrice < 1
+                    ? maxPrice.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+                    : maxPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  }
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="text-right">
-            <div className="text-muted-foreground text-xs">Máximo</div>
-            <div className="font-semibold text-foreground">
-              ${maxPrice < 0.01 
-                ? maxPrice.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
-                : maxPrice < 1
-                ? maxPrice.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
-                : maxPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-              }
+            <div className="text-xs text-muted-foreground mt-2">
+              Intervalo de Confiança: {confidence}%
             </div>
-          </div>
-        </div>
-        <div className="text-xs text-muted-foreground mt-2">
-          Intervalo de Confiança: {confidence}%
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

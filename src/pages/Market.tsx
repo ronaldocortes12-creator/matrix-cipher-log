@@ -13,10 +13,12 @@ type Crypto = {
   price: number;
   trend: "up" | "down";
   probabilityType: "Alta" | "Queda";
-  probability: number;
+  probability: number; // percent, not rounded here
   minPrice: number;
   maxPrice: number;
   confidence: number;
+  rangeStatus?: 'ok' | 'review';
+  dataStatus?: 'ok' | 'insufficient';
 };
 
 const Market = () => {
@@ -396,6 +398,62 @@ const Market = () => {
     // Approximation: p ≈ 2 exp(-2 ne d^2), clamp to [0,1]
     const p = 2 * Math.exp(-2 * ne * d * d);
     return Math.max(0, Math.min(1, p));
+  };
+
+  // Provider fallback helpers
+  const resolveBinanceSymbol = (id: string, symbol: string) => {
+    const map: Record<string, string> = {
+      bitcoin: 'BTC', ethereum: 'ETH', binancecoin: 'BNB', solana: 'SOL', ripple: 'XRP', cardano: 'ADA',
+      'avalanche-2': 'AVAX', dogecoin: 'DOGE', polkadot: 'DOT', chainlink: 'LINK', polygon: 'MATIC', uniswap: 'UNI',
+      litecoin: 'LTC', stellar: 'XLM', 'worldcoin-wld': 'WLD', pepe: 'PEPE', near: 'NEAR', 'the-graph': 'GRT',
+      cosmos: 'ATOM', filecoin: 'FIL'
+    };
+    return (map[id] || symbol) + 'USDT';
+  };
+
+  const fetchHistoricalFromCoingecko = async (id: string): Promise<{ prices: any[]; source: string; ms: number }> => {
+    const t0 = performance.now();
+    const resp = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=365&interval=daily`);
+    if (!resp.ok) throw new Error(`CG_${id}_${resp.status}`);
+    const data = await resp.json();
+    return { prices: data.prices || [], source: 'coingecko', ms: performance.now() - t0 };
+  };
+
+  const fetchHistoricalFromBinance = async (id: string, symbol: string): Promise<{ prices: any[]; source: string; ms: number }> => {
+    const t0 = performance.now();
+    const pair = resolveBinanceSymbol(id, symbol);
+    const url = `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=1d&limit=365`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`BINANCE_${pair}_${resp.status}`);
+    const klines = await resp.json();
+    const prices = (klines || []).map((k: any[]) => [k[0], parseFloat(k[4])]);
+    return { prices, source: 'binance', ms: performance.now() - t0 };
+  };
+
+  const fetchHistoricalWithFallback = async (id: string, symbol: string): Promise<{ prices: any[]; source: string; ms: number }> => {
+    try {
+      return await fetchHistoricalFromCoingecko(id);
+    } catch (e1) {
+      try {
+        return await fetchHistoricalFromBinance(id, symbol);
+      } catch (e2) {
+        // Final fallback to mock
+        const prices = mockHistoricalPrices[id] || [];
+        if (!prices.length) throw new Error(`NO_HIST_DATA_${id}`);
+        return { prices, source: 'mock', ms: 0 };
+      }
+    }
+  };
+
+  // Winsorize at 1% tails
+  const winsorize1pct = (arr: number[]): number[] => {
+    if (arr.length < 20) return arr; // not enough
+    const sorted = [...arr].sort((a,b)=>a-b);
+    const q1Idx = Math.floor(0.01 * (sorted.length - 1));
+    const q99Idx = Math.ceil(0.99 * (sorted.length - 1));
+    const lo = sorted[q1Idx];
+    const hi = sorted[q99Idx];
+    return arr.map(v => Math.min(hi, Math.max(lo, v)));
   };
 
   const loadMockData = () => {
