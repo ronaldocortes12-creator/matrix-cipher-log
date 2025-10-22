@@ -581,8 +581,13 @@ const loadCryptoData = async () => {
 
   const fetchHistoricalFromCoingecko = async (id: string): Promise<{ prices: any[]; source: string; ms: number }> => {
     const t0 = performance.now();
-    const resp = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=365&interval=daily`);
-    if (!resp.ok) throw new Error(`CG_${id}_${resp.status}`);
+    // Corrigir IDs problemáticos no CoinGecko para histórico
+    const idMap: Record<string, string> = {
+      polygon: 'matic-network', // "polygon" pode retornar 404 no market_chart
+    };
+    const effectiveId = idMap[id] || id;
+    const resp = await fetch(`https://api.coingecko.com/api/v3/coins/${effectiveId}/market_chart?vs_currency=usd&days=365&interval=daily`);
+    if (!resp.ok) throw new Error(`CG_${effectiveId}_${resp.status}`);
     const data = await resp.json();
     return { prices: data.prices || [], source: 'coingecko', ms: performance.now() - t0 };
   };
