@@ -26,6 +26,11 @@ const Market = () => {
 
   useEffect(() => {
     loadCryptoData();
+    const interval = setInterval(() => {
+      loadCryptoData();
+    }, 15 * 60 * 1000); // refresh every 15 minutes
+
+    return () => clearInterval(interval);
   }, []);
 
   const loadCryptoData = async () => {
@@ -85,7 +90,7 @@ const Market = () => {
       
       for (const crypto of cryptoList) {
         // Check cache first
-        const cached = cryptoCache.get(crypto.id);
+        const cached = cryptoCache.get(`prices:${crypto.id}`);
         
         if (cached) {
           console.log(`[${crypto.symbol}] Using cached data (age: ${Math.floor((Date.now() - cached.timestamp) / 60000)}min)`);
@@ -126,7 +131,7 @@ const Market = () => {
           // Cache successful fetch
           const currentData = priceData[crypto.id];
           if (currentData && prices.length > 0) {
-            cryptoCache.set(crypto.id, {
+            cryptoCache.set(`prices:${crypto.id}`, {
               prices,
               currentPrice: currentData.usd,
               change24h: currentData.usd_24h_change
@@ -145,8 +150,8 @@ const Market = () => {
         }
       }
 
-      // STEP 3: Calculate BTC flow component (for 40% weight)
-      const btcFlowComponent = calculateBTCFlowComponent(historicalMap['bitcoin'] || []);
+      // STEP 3: Calculate BTC flow component (for 40% weight) with 3h cache
+      const btcFlowComponent = await getBTCFlowComponentWithCache(historicalMap['bitcoin'] || []);
       console.log(`[BTC_FLOW] p_alta=${btcFlowComponent.pAlta.toFixed(3)}, p_queda=${btcFlowComponent.pQueda.toFixed(3)}`);
 
       // STEP 4: Process each crypto independently with DETAILED LOGGING
@@ -306,7 +311,6 @@ const Market = () => {
     return z > 0 ? 1 - prob : prob;
   };
 
-  // Calculate BTC flow component (40% weight)
   const calculateBTCFlowComponent = (btcHistoricalData: any[]): { pAlta: number; pQueda: number } => {
     if (btcHistoricalData.length < 30) {
       return { pAlta: 0.5, pQueda: 0.5 };
@@ -343,6 +347,55 @@ const Market = () => {
       pAlta: m,
       pQueda: 1 - m
     };
+  };
+
+  // 3h cache for BTC flow component
+  const getBTCFlowComponentWithCache = async (btcHistoricalData: any[]): Promise<{ pAlta: number; pQueda: number }> => {
+    try {
+      const raw = localStorage.getItem('btc_flow_cache');
+      if (raw) {
+        const cached = JSON.parse(raw) as { pAlta: number; pQueda: number; ts: number };
+        if (Date.now() - cached.ts < 3 * 60 * 60 * 1000) { // 3 hours
+          return { pAlta: cached.pAlta, pQueda: cached.pQueda };
+        }
+      }
+    } catch {}
+    const flow = calculateBTCFlowComponent(btcHistoricalData);
+    try {
+      localStorage.setItem('btc_flow_cache', JSON.stringify({ ...flow, ts: Date.now() }));
+    } catch {}
+    return flow;
+  };
+
+  // SHA-256 hash of price closes
+  const sha256Hex = async (values: number[]): Promise<string> => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(JSON.stringify(values));
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // Kolmogorov-Smirnov test (approx p-value)
+  const ksTestPValue = (a: number[], b: number[]): number => {
+    if (!a.length || !b.length) return 1;
+    const sa = [...a].sort((x, y) => x - y);
+    const sb = [...b].sort((x, y) => x - y);
+    let ia = 0, ib = 0;
+    const values = Array.from(new Set([...sa, ...sb])).sort((x, y) => x - y);
+    let d = 0;
+    for (const v of values) {
+      while (ia < sa.length && sa[ia] <= v) ia++;
+      while (ib < sb.length && sb[ib] <= v) ib++;
+      const fa = ia / sa.length;
+      const fb = ib / sb.length;
+      d = Math.max(d, Math.abs(fa - fb));
+    }
+    const n = sa.length, m = sb.length;
+    const ne = (n * m) / (n + m);
+    // Approximation: p ≈ 2 exp(-2 ne d^2), clamp to [0,1]
+    const p = 2 * Math.exp(-2 * ne * d * d);
+    return Math.max(0, Math.min(1, p));
   };
 
   const loadMockData = () => {
