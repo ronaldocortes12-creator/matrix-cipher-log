@@ -3,7 +3,7 @@ import { MatrixRain } from "@/components/MatrixRain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo-main.png";
 import { Lock, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -128,11 +128,12 @@ const Index = () => {
       {/* Login Container */}
       <div className="relative z-10 w-full max-w-md px-6 mx-4 pt-2">
         {/* Logo */}
-        <div className="flex justify-center mb-1 animate-float">
+        <div className="flex justify-center mb-8 animate-float">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
-            className="w-72 h-auto object-contain drop-shadow-[0_0_40px_rgba(77,208,225,0.5)] filter brightness-110"
+            className="w-80 h-auto object-contain drop-shadow-[0_0_50px_rgba(77,208,225,0.6)] filter brightness-125 contrast-125"
+            style={{ filter: 'drop-shadow(0 0 50px rgba(77,208,225,0.6)) brightness(1.25) contrast(1.25)' }}
           />
         </div>
 
