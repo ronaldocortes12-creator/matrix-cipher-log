@@ -73,16 +73,20 @@ export const CryptoCard = ({
       <div className="mb-4">
         <div className="flex items-center justify-between text-sm mb-1">
           <span className="text-muted-foreground">Probabilidade de {probabilityType}</span>
-          <span
-            className={cn(
-              "font-semibold px-2 py-0.5 rounded",
-              probabilityType === "Alta"
-                ? "bg-green-500/20 text-green-400"
-                : "bg-red-500/20 text-red-400"
-            )}
-          >
-            {probability.toFixed(1)}%
-          </span>
+          {dataStatus !== 'insufficient' ? (
+            <span
+              className={cn(
+                "font-semibold px-2 py-0.5 rounded",
+                probabilityType === "Alta"
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-red-500/20 text-red-400"
+              )}
+            >
+              {probability.toFixed(1)}%
+            </span>
+          ) : (
+            <span className="text-xs text-yellow-500">Dados insuficientes</span>
+          )}
         </div>
         {dataStatus === 'insufficient' && (
           <div className="text-xs text-yellow-500">Dados insuficientes (janela {'<'} 330 dias)</div>
@@ -94,7 +98,9 @@ export const CryptoCard = ({
         <div className="text-xs text-muted-foreground font-medium mb-2">
           Range de Preço (IC 95%)
         </div>
-        {rangeStatus === 'review' ? (
+        {dataStatus === 'insufficient' ? (
+          <div className="text-xs text-yellow-500">Sem faixa confiável (dados insuficientes)</div>
+        ) : rangeStatus === 'review' ? (
           <div className="text-xs text-yellow-500">Faixa em revisão</div>
         ) : (
           <>

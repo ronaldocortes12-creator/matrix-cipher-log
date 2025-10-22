@@ -63,7 +63,8 @@ const Market = () => {
         { id: 'filecoin', symbol: 'FIL', name: 'Filecoin', logo: 'https://assets.coingecko.com/coins/images/12817/small/filecoin.png' },
       ];
 
-      console.log('[MARKET] Starting data load with cache + fallback system');
+       console.log('[MARKET] Starting data load with cache + fallback system');
+       const ALLOW_CACHE = false;
 
       // STEP 1: Fetch current prices (with retry and fallback)
       let priceData: Record<string, any> = {};
@@ -95,7 +96,7 @@ const Market = () => {
         // Check cache first
         const cached = cryptoCache.get(`prices:${crypto.id}`);
         
-        if (cached) {
+        if (ALLOW_CACHE && cached) {
           console.log(`[${crypto.symbol}] Using cached data (age: ${Math.floor((Date.now() - cached.timestamp) / 60000)}min)`);
           historicalMap[crypto.id] = cached.prices;
           
@@ -365,9 +366,10 @@ const Market = () => {
         const probabilityType: "Alta" | "Queda" = pAltaFinal >= 0.5 ? "Alta" : "Queda";
         const probability = pAltaFinal >= 0.5 ? (pAltaFinal * 100) : ((1 - pAltaFinal) * 100);
 
-        // Range validation: within 30%..400% of current price and must be observed
+         // Range validation: within 30%..400% of current price and must be observed
         const inBounds = (s.minObserved >= s.price*0.3) && (s.maxObserved <= s.price*4);
-        const rangeStatus: 'ok' | 'review' = inBounds ? 'ok' : 'review';
+        const rf = rangeFailures[s.id] || 0;
+        const rangeStatus: 'ok' | 'review' = rf >= 2 ? 'review' : (inBounds ? 'ok' : 'review');
 
         return {
           name: s.name,
@@ -381,7 +383,7 @@ const Market = () => {
           maxPrice: s.maxObserved,
           confidence: 95,
           rangeStatus,
-          dataStatus: s.nPoints >= 330 ? 'ok' : 'insufficient',
+          dataStatus: s.nPoints >= 330 && !duplicateMinMaxIds.has(s.id) ? 'ok' : 'insufficient',
         };
       });
 
