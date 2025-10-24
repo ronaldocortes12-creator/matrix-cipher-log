@@ -55,6 +55,31 @@ function standardDeviation(values: number[]): number {
   return Math.sqrt(variance);
 }
 
+// Função para buscar dados históricos da CoinGecko como fallback
+async function fetchFallbackData(coinId: string, symbol: string) {
+  try {
+    console.log(`  🔄 Buscando fallback para ${symbol}...`);
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=365&interval=daily`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`CoinGecko API failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const prices = data.prices || [];
+    const marketCaps = data.market_caps || [];
+    
+    console.log(`  ✓ Fallback ${symbol}: ${prices.length} preços, ${marketCaps.length} market caps`);
+    
+    return { prices, marketCaps };
+  } catch (error) {
+    console.error(`  ❌ Fallback falhou para ${symbol}:`, error);
+    return { prices: [], marketCaps: [] };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -69,6 +94,8 @@ Deno.serve(async (req) => {
     );
 
     const calculationDate = new Date().toISOString();
+    let successCount = 0;
+    let fallbackCount = 0;
 
     for (const crypto of CRYPTOS) {
       try {
@@ -84,18 +111,38 @@ Deno.serve(async (req) => {
           .order('date', { ascending: true })
           .limit(365);
 
-        if (priceError || !priceData || priceData.length < 30) {
-          console.error(`❌ Dados insuficientes para ${crypto.symbol}`);
+        let historicalPrices = priceData || [];
+        
+        // Se não tiver dados suficientes, buscar da CoinGecko como fallback
+        if (!priceError && historicalPrices.length < 30) {
+          console.log(`  ⚠️ Dados insuficientes no banco para ${crypto.symbol}, usando fallback...`);
+          
+          const fallbackData = await fetchFallbackData(crypto.coinId, crypto.symbol);
+          
+          if (fallbackData.prices.length > 0) {
+            fallbackCount++;
+            // Converter formato da CoinGecko para o formato do banco
+            historicalPrices = fallbackData.prices.map(([timestamp, price]: [number, number]) => ({
+              date: new Date(timestamp).toISOString().split('T')[0],
+              closing_price: price.toString()
+            }));
+            
+            console.log(`  ✓ Fallback ${crypto.symbol}: ${historicalPrices.length} preços`);
+          }
+        }
+
+        if (historicalPrices.length < 30) {
+          console.error(`❌ Dados insuficientes para ${crypto.symbol} (${historicalPrices.length} dias)`);
           continue;
         }
 
-        console.log(`  ✓ ${priceData.length} dias de histórico de preços`);
+        console.log(`  ✓ ${historicalPrices.length} dias de histórico de preços`);
 
         // Calcular retornos logarítmicos diários
         const logReturns: number[] = [];
-        for (let i = 1; i < priceData.length; i++) {
-          const prevPrice = parseFloat(priceData[i - 1].closing_price);
-          const currPrice = parseFloat(priceData[i].closing_price);
+        for (let i = 1; i < historicalPrices.length; i++) {
+          const prevPrice = parseFloat(historicalPrices[i - 1].closing_price);
+          const currPrice = parseFloat(historicalPrices[i].closing_price);
           if (prevPrice > 0 && currPrice > 0) {
             const logReturn = Math.log(currPrice / prevPrice);
             logReturns.push(logReturn);
@@ -131,15 +178,34 @@ Deno.serve(async (req) => {
           .limit(7);
 
         let pAltaMcap = 0.5; // Default neutro se não houver dados suficientes
+        let marketCapData = mcapData || [];
 
-        if (!mcapError && mcapData && mcapData.length >= 2) {
-          console.log(`  ✓ ${mcapData.length} dias de market cap`);
+        // Se não tiver dados de market cap suficientes, usar fallback
+        if (!mcapError && marketCapData.length < 2) {
+          console.log(`  ⚠️ Market cap insuficiente para ${crypto.symbol}, usando fallback...`);
+          
+          const fallbackData = await fetchFallbackData(crypto.coinId, crypto.symbol);
+          
+          if (fallbackData.marketCaps.length > 0) {
+            // Converter últimos 7 dias do market cap
+            const recentMcaps = fallbackData.marketCaps.slice(-7);
+            marketCapData = recentMcaps.map(([timestamp, mcap]: [number, number]) => ({
+              date: new Date(timestamp).toISOString().split('T')[0],
+              market_cap: mcap.toString()
+            }));
+            
+            console.log(`  ✓ Fallback market cap ${crypto.symbol}: ${marketCapData.length} dias`);
+          }
+        }
+
+        if (marketCapData && marketCapData.length >= 2) {
+          console.log(`  ✓ ${marketCapData.length} dias de market cap`);
 
           // Calcular variações percentuais diárias
           const mcapChanges: number[] = [];
-          for (let i = 0; i < mcapData.length - 1; i++) {
-            const current = parseFloat(mcapData[i].market_cap);
-            const previous = parseFloat(mcapData[i + 1].market_cap);
+          for (let i = 0; i < marketCapData.length - 1; i++) {
+            const current = parseFloat(marketCapData[i].market_cap);
+            const previous = parseFloat(marketCapData[i + 1].market_cap);
             if (previous > 0) {
               const percentChange = (current - previous) / previous;
               mcapChanges.push(percentChange);
@@ -161,7 +227,7 @@ Deno.serve(async (req) => {
             console.log(`  P(alta|mcap) = ${(pAltaMcap * 100).toFixed(2)}%`);
           }
         } else {
-          console.log(`  ⚠️ Dados de market cap insuficientes, usando neutro (50%)`);
+          console.log(`  ⚠️ Market cap insuficiente para ${crypto.symbol}, usando neutro (50%)`);
         }
 
         // ========== ETAPA 3: COMBINAÇÃO FINAL (60% preço + 40% market cap) ==========
@@ -204,7 +270,8 @@ Deno.serve(async (req) => {
         if (insertError) {
           console.error(`❌ Erro ao salvar ${crypto.symbol}:`, insertError);
         } else {
-          console.log(`  ✅ ${crypto.symbol} salvo com sucesso`);
+          successCount++;
+          console.log(`  ✅ ${crypto.symbol} salvo`);
         }
 
         // Pequeno delay entre processamentos
@@ -215,13 +282,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log('\n✅ Cálculo de probabilidades completo!');
+    console.log(`\n✅ Cálculo completo! Sucesso: ${successCount}, Fallbacks: ${fallbackCount}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: 'Probabilidades calculadas com sucesso',
-        cryptos_calculated: CRYPTOS.length,
+        cryptos_calculated: successCount,
+        cryptos_with_fallback: fallbackCount,
         calculation_date: calculationDate,
       }),
       { 
