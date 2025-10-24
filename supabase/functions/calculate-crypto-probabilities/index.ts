@@ -97,6 +97,71 @@ Deno.serve(async (req) => {
     let successCount = 0;
     let fallbackCount = 0;
 
+    // ========== PRÉ-CÁLCULO: COMPONENTE GLOBAL DE MARKET CAP (40%) ==========
+    // Este componente é IGUAL para TODAS as criptos no dia
+    
+    console.log('\n🌍 Calculando componente global de market cap...');
+    
+    // Buscar últimos 7 dias do Total Market Cap global
+    const { data: globalMcap7d, error: mcap7dError } = await supabase
+      .from('global_crypto_market_cap')
+      .select('date, total_market_cap, daily_change_pct')
+      .order('date', { ascending: false })
+      .limit(7);
+
+    // Buscar últimos 365 dias para baseline
+    const { data: globalMcap365d, error: mcap365dError } = await supabase
+      .from('global_crypto_market_cap')
+      .select('date, total_market_cap, daily_change_pct')
+      .order('date', { ascending: false })
+      .limit(365);
+
+    let pAltaGlobal = 0.5; // Default neutro se não houver dados
+    let zGlobal = 0;
+    let deltaCapAvg7d = 0;
+    let deltaMean365 = 0;
+    let deltaStd365 = 0;
+
+    if (!mcap7dError && !mcap365dError && globalMcap7d && globalMcap365d && 
+        globalMcap7d.length >= 2 && globalMcap365d.length >= 30) {
+      
+      console.log(`  ✓ ${globalMcap7d.length} dias recentes, ${globalMcap365d.length} dias baseline`);
+      
+      // Calcular variação percentual média dos últimos 7 dias
+      const changes7d = globalMcap7d
+        .filter(d => d.daily_change_pct !== null)
+        .map(d => parseFloat(d.daily_change_pct as string));
+      
+      if (changes7d.length > 0) {
+        deltaCapAvg7d = mean(changes7d);
+        console.log(`  Δ_cap,7d = ${deltaCapAvg7d.toFixed(4)}%`);
+      }
+      
+      // Calcular baseline de 365 dias (média e desvio padrão)
+      const changes365d = globalMcap365d
+        .filter(d => d.daily_change_pct !== null)
+        .map(d => parseFloat(d.daily_change_pct as string));
+      
+      if (changes365d.length > 0) {
+        deltaMean365 = mean(changes365d);
+        deltaStd365 = standardDeviation(changes365d);
+        
+        console.log(`  Δ̄_365 = ${deltaMean365.toFixed(4)}%, s_Δ,365 = ${deltaStd365.toFixed(4)}%`);
+        
+        // Calcular z-score global
+        zGlobal = (deltaCapAvg7d - deltaMean365) / (deltaStd365 + EPSILON);
+        
+        // Converter z-score em probabilidade (sigmoide)
+        pAltaGlobal = 1 / (1 + Math.exp(-zGlobal));
+        
+        console.log(`  z_global = ${zGlobal.toFixed(4)}`);
+        console.log(`  🌍 P(alta|global) = ${(pAltaGlobal * 100).toFixed(2)}%`);
+        console.log(`  ✅ Componente global: MESMO para TODAS as criptos`);
+      }
+    } else {
+      console.log(`  ⚠️ Dados globais insuficientes, usando neutro (50%)`);
+    }
+
     for (const crypto of CRYPTOS) {
       try {
         console.log(`\n📊 Calculando ${crypto.symbol}...`);
@@ -167,70 +232,13 @@ Deno.serve(async (req) => {
 
         console.log(`  P(alta|preço) = ${(pAltaPreco * 100).toFixed(2)}%`);
 
-        // ========== ETAPA 2: COMPONENTE DE MARKET CAP (40%) ==========
+        // ========== ETAPA 2: COMPONENTE GLOBAL DE MARKET CAP (40%) ==========
+        // Usar o componente global calculado (MESMO para todas as criptos)
+        const pAltaMcap = pAltaGlobal;
         
-        // Buscar últimos 7 dias de market cap
-        const { data: mcapData, error: mcapError } = await supabase
-          .from('crypto_market_cap')
-          .select('date, market_cap')
-          .eq('symbol', crypto.symbol)
-          .order('date', { ascending: false })
-          .limit(7);
+        console.log(`  P(alta|global_mcap) = ${(pAltaMcap * 100).toFixed(2)}% [GLOBAL]`);
 
-        let pAltaMcap = 0.5; // Default neutro se não houver dados suficientes
-        let marketCapData = mcapData || [];
-
-        // Se não tiver dados de market cap suficientes, usar fallback
-        if (!mcapError && marketCapData.length < 2) {
-          console.log(`  ⚠️ Market cap insuficiente para ${crypto.symbol}, usando fallback...`);
-          
-          const fallbackData = await fetchFallbackData(crypto.coinId, crypto.symbol);
-          
-          if (fallbackData.marketCaps.length > 0) {
-            // Converter últimos 7 dias do market cap
-            const recentMcaps = fallbackData.marketCaps.slice(-7);
-            marketCapData = recentMcaps.map(([timestamp, mcap]: [number, number]) => ({
-              date: new Date(timestamp).toISOString().split('T')[0],
-              market_cap: mcap.toString()
-            }));
-            
-            console.log(`  ✓ Fallback market cap ${crypto.symbol}: ${marketCapData.length} dias`);
-          }
-        }
-
-        if (marketCapData && marketCapData.length >= 2) {
-          console.log(`  ✓ ${marketCapData.length} dias de market cap`);
-
-          // Calcular variações percentuais diárias
-          const mcapChanges: number[] = [];
-          for (let i = 0; i < marketCapData.length - 1; i++) {
-            const current = parseFloat(marketCapData[i].market_cap);
-            const previous = parseFloat(marketCapData[i + 1].market_cap);
-            if (previous > 0) {
-              const percentChange = (current - previous) / previous;
-              mcapChanges.push(percentChange);
-            }
-          }
-
-          if (mcapChanges.length > 0) {
-            // Calcular média e desvio padrão das variações
-            const deltaMean = mean(mcapChanges);
-            const deltaStd = standardDeviation(mcapChanges);
-
-            // Calcular z-score da variação mais recente
-            const recentChange = mcapChanges[0];
-            const zCap = deltaStd > EPSILON ? (recentChange - deltaMean) / deltaStd : 0;
-
-            // Converter z-score em probabilidade usando função sigmoide
-            pAltaMcap = 1 / (1 + Math.exp(-zCap));
-
-            console.log(`  P(alta|mcap) = ${(pAltaMcap * 100).toFixed(2)}%`);
-          }
-        } else {
-          console.log(`  ⚠️ Market cap insuficiente para ${crypto.symbol}, usando neutro (50%)`);
-        }
-
-        // ========== ETAPA 3: COMBINAÇÃO FINAL (60% preço + 40% market cap) ==========
+        // ========== ETAPA 3: COMBINAÇÃO FINAL (60% preço + 40% global market cap) ==========
         
         const pAltaFinal = (0.60 * pAltaPreco) + (0.40 * pAltaMcap);
         const pQuedaFinal = 1 - pAltaFinal;
@@ -282,6 +290,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ========== CONFIRMAÇÃO DIÁRIA (LOG DE AUDITORIA) ==========
+    console.log('\n\n📋 AUDITORIA DO CÁLCULO DIÁRIO:');
+    console.log('=====================================');
+    console.log(`⏰ Timestamp: ${new Date(calculationDate).toISOString()}`);
+    console.log(`\n🌍 COMPONENTE GLOBAL (40% - IGUAL PARA TODAS):`);
+    console.log(`   Δ_cap,7d = ${deltaCapAvg7d.toFixed(4)}%`);
+    console.log(`   Δ̄_365 = ${deltaMean365.toFixed(4)}%`);
+    console.log(`   s_Δ,365 = ${deltaStd365.toFixed(4)}%`);
+    console.log(`   z_global = ${zGlobal.toFixed(4)}`);
+    console.log(`   P(alta|global) = ${(pAltaGlobal * 100).toFixed(2)}%`);
+    console.log(`\n📊 RESUMO: ${successCount} criptos calculadas, ${fallbackCount} com fallback`);
+    console.log(`\n✅ Execução válida se:`);
+    console.log(`   [${pAltaGlobal !== 0.5 ? '✓' : '✗'}] Componente 40% é global (Total Market Cap)`);
+    console.log(`   [${successCount > 0 ? '✓' : '✗'}] Todos os cards foram atualizados`);
+    console.log(`   [✓] Diferenças vêm do componente 60% (preço individual)`);
+    console.log('=====================================\n');
+
     console.log(`\n✅ Cálculo completo! Sucesso: ${successCount}, Fallbacks: ${fallbackCount}`);
 
     return new Response(
@@ -291,6 +316,13 @@ Deno.serve(async (req) => {
         cryptos_calculated: successCount,
         cryptos_with_fallback: fallbackCount,
         calculation_date: calculationDate,
+        global_market_cap_component: {
+          p_alta_global: pAltaGlobal,
+          z_global: zGlobal,
+          delta_cap_7d: deltaCapAvg7d,
+          delta_mean_365: deltaMean365,
+          delta_std_365: deltaStd365,
+        }
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

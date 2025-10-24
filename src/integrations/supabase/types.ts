@@ -145,6 +145,30 @@ export type Database = {
         }
         Relationships: []
       }
+      global_crypto_market_cap: {
+        Row: {
+          created_at: string
+          daily_change_pct: number | null
+          date: string
+          id: string
+          total_market_cap: number
+        }
+        Insert: {
+          created_at?: string
+          daily_change_pct?: number | null
+          date: string
+          id?: string
+          total_market_cap: number
+        }
+        Update: {
+          created_at?: string
+          daily_change_pct?: number | null
+          date?: string
+          id?: string
+          total_market_cap?: number
+        }
+        Relationships: []
+      }
       lesson_progress: {
         Row: {
           completed: boolean | null

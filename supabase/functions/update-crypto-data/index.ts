@@ -204,62 +204,68 @@ Deno.serve(async (req) => {
       console.log('  ✓ Market cap antigo removido');
     }
 
-    // 3. Atualizar Market Cap total dos últimos 7 dias
-    console.log('💰 Buscando histórico de Market Cap total...');
-    const mcapResponse = await fetch(
-      'https://api.coingecko.com/api/v3/global/market_cap_chart?days=7'
+    // 3. Atualizar Crypto Total Market Cap global (7 dias + 365 dias)
+    console.log('💰 Buscando histórico de Crypto Total Market Cap global...');
+    
+    // Buscar 365 dias para baseline histórico
+    const mcap365Response = await fetch(
+      'https://api.coingecko.com/api/v3/global/market_cap_chart?days=365'
     );
 
-    if (mcapResponse.ok) {
-      const mcapData = await mcapResponse.json();
+    if (mcap365Response.ok) {
+      const mcapData = await mcap365Response.json();
       const marketCapHistory = mcapData.market_cap_chart?.usd || [];
 
-      console.log(`  ✓ Market Cap Total: ${marketCapHistory.length} dias de histórico`);
+      console.log(`  ✓ Global Market Cap: ${marketCapHistory.length} dias coletados`);
 
-      // Inserir/atualizar market cap
+      // Inserir/atualizar global market cap com variação percentual diária
       for (let i = 0; i < marketCapHistory.length; i++) {
         const [timestamp, totalMcap] = marketCapHistory[i];
         const date = new Date(timestamp).toISOString().split('T')[0];
         
-        // Calcular variação em relação ao dia anterior
-        let mcapChange = null;
+        // Calcular variação percentual em relação ao dia anterior
+        let dailyChangePct = null;
         if (i > 0) {
           const previousMcap = marketCapHistory[i - 1][1];
-          mcapChange = totalMcap - previousMcap;
+          if (previousMcap > 0) {
+            dailyChangePct = ((totalMcap - previousMcap) / previousMcap) * 100;
+          }
         }
 
         const { error } = await supabase
-          .from('market_cap_history')
+          .from('global_crypto_market_cap')
           .upsert({
             date: date,
             total_market_cap: totalMcap,
-            market_cap_change: mcapChange,
+            daily_change_pct: dailyChangePct,
           }, {
             onConflict: 'date'
           });
 
         if (error) {
-          console.error(`Erro ao inserir market cap total ${date}:`, error);
+          console.error(`Erro ao inserir global market cap ${date}:`, error);
         }
       }
+      
+      console.log(`  ✅ Global Market Cap atualizado (${marketCapHistory.length} dias)`);
     } else {
-      console.error('❌ Erro ao buscar market cap total:', mcapResponse.status);
+      console.error('❌ Erro ao buscar global market cap:', mcap365Response.status);
     }
 
-    // 4. Remover market cap total com mais de 7 dias
-    console.log('🗑️ Removendo market cap total antigo (> 7 dias)...');
-    const date7DaysAgo = new Date();
-    date7DaysAgo.setDate(date7DaysAgo.getDate() - 7);
+    // 4. Remover global market cap com mais de 365 dias
+    console.log('🗑️ Removendo global market cap antigo (> 365 dias)...');
+    const date365DaysAgoMcap = new Date();
+    date365DaysAgoMcap.setDate(date365DaysAgoMcap.getDate() - 365);
     
-    const { error: deleteOldMcapTotalError } = await supabase
-      .from('market_cap_history')
+    const { error: deleteOldGlobalMcapError } = await supabase
+      .from('global_crypto_market_cap')
       .delete()
-      .lt('date', date7DaysAgo.toISOString().split('T')[0]);
+      .lt('date', date365DaysAgoMcap.toISOString().split('T')[0]);
 
-    if (deleteOldMcapTotalError) {
-      console.error('Erro ao remover market cap total antigo:', deleteOldMcapTotalError);
+    if (deleteOldGlobalMcapError) {
+      console.error('Erro ao remover global market cap antigo:', deleteOldGlobalMcapError);
     } else {
-      console.log('  ✓ Market cap total antigo removido');
+      console.log('  ✓ Global market cap antigo removido');
     }
 
     console.log('✅ Processo completo!');
