@@ -78,10 +78,11 @@ const Market = () => {
         { id: 'sui', symbol: 'SUI', name: 'Sui', logo: 'https://assets.coingecko.com/coins/images/26375/small/sui_asset.jpeg' },
       ];
 
-      // Buscar probabilidades calculadas do banco
-      const { data: probabilities, error: probError } = await supabase
+      // Buscar probabilidades calculadas do banco (preferir últimas 24h)
+      let { data: probabilities, error: probError } = await supabase
         .from('crypto_probabilities')
         .select('*')
+        .gte('calculation_date', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
         .order('calculation_date', { ascending: false });
 
       if (probError) {
@@ -95,11 +96,33 @@ const Market = () => {
         return;
       }
 
+      // Se não houver dados suficientes, disparar cálculo agora e refazer a consulta
+      const uniqueCount = new Set((probabilities || []).map((p: any) => p.symbol)).size;
+      if (uniqueCount < cryptoList.length) {
+        console.log(`[MARKET] ⚠️ Apenas ${uniqueCount}/${cryptoList.length} com dados. Disparando cálculo agora...`);
+        toast({ title: 'Atualizando dados', description: 'Calculando probabilidades agora...', duration: 3500 });
+        try {
+          await supabase.functions.invoke('calculate-crypto-probabilities', { body: {} });
+          // pequena espera para o banco consolidar
+          await new Promise((r) => setTimeout(r, 1200));
+          const refetch = await supabase
+            .from('crypto_probabilities')
+            .select('*')
+            .gte('calculation_date', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+            .order('calculation_date', { ascending: false });
+          if (!refetch.error) {
+            probabilities = refetch.data || [];
+          }
+        } catch (e) {
+          console.warn('[MARKET] Falha ao disparar cálculo imediato', e);
+        }
+      }
+
       console.log('[MARKET] ✅ Probabilidades carregadas:', probabilities?.length || 0);
 
       // Criar mapa de probabilidades por símbolo (pegar mais recente de cada)
       const probabilityMap = new Map();
-      probabilities?.forEach((prob) => {
+      probabilities?.forEach((prob: any) => {
         if (!probabilityMap.has(prob.symbol)) {
           probabilityMap.set(prob.symbol, prob);
         }
