@@ -49,6 +49,33 @@ export type Database = {
           },
         ]
       }
+      crypto_historical_prices: {
+        Row: {
+          closing_price: number
+          coin_id: string
+          created_at: string | null
+          date: string
+          id: string
+          symbol: string
+        }
+        Insert: {
+          closing_price: number
+          coin_id: string
+          created_at?: string | null
+          date: string
+          id?: string
+          symbol: string
+        }
+        Update: {
+          closing_price?: number
+          coin_id?: string
+          created_at?: string | null
+          date?: string
+          id?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       lesson_progress: {
         Row: {
           completed: boolean | null
@@ -103,6 +130,30 @@ export type Database = {
           title?: string
           updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      market_cap_history: {
+        Row: {
+          created_at: string | null
+          date: string
+          id: string
+          market_cap_change: number | null
+          total_market_cap: number
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          id?: string
+          market_cap_change?: number | null
+          total_market_cap: number
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          id?: string
+          market_cap_change?: number | null
+          total_market_cap?: number
         }
         Relationships: []
       }
