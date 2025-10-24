@@ -42,8 +42,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Atualizar preços históricos de cada cripto (365 dias)
-    console.log('📊 Buscando preços históricos...');
+    // 1. Atualizar preços históricos e market cap de cada cripto (365 dias)
+    console.log('📊 Buscando preços históricos e market cap...');
     for (const crypto of CRYPTOS) {
       try {
         const response = await fetch(
@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
 
         const data = await response.json();
         const prices = data.prices || [];
+        const marketCaps = data.market_caps || [];
 
         console.log(`  ✓ ${crypto.symbol}: ${prices.length} dias de histórico`);
 
@@ -76,7 +77,36 @@ Deno.serve(async (req) => {
             });
 
           if (error) {
-            console.error(`Erro ao inserir ${crypto.symbol} ${date}:`, error);
+            console.error(`Erro ao inserir preço ${crypto.symbol} ${date}:`, error);
+          }
+        }
+
+        // Inserir/atualizar market cap individual
+        for (let i = 0; i < marketCaps.length; i++) {
+          const [timestamp, marketCap] = marketCaps[i];
+          const date = new Date(timestamp).toISOString().split('T')[0];
+          
+          // Calcular variação em relação ao dia anterior
+          let mcapChange = null;
+          if (i > 0) {
+            const previousMcap = marketCaps[i - 1][1];
+            mcapChange = marketCap - previousMcap;
+          }
+
+          const { error } = await supabase
+            .from('crypto_market_cap')
+            .upsert({
+              symbol: crypto.symbol,
+              coin_id: crypto.coinId,
+              date: date,
+              market_cap: marketCap,
+              market_cap_change: mcapChange,
+            }, {
+              onConflict: 'symbol,date'
+            });
+
+          if (error) {
+            console.error(`Erro ao inserir market cap ${crypto.symbol} ${date}:`, error);
           }
         }
 
@@ -87,8 +117,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2. Remover preços com mais de 365 dias
-    console.log('🗑️ Removendo preços antigos (> 365 dias)...');
+    // 2. Remover preços e market cap com mais de 365 dias
+    console.log('🗑️ Removendo dados antigos (> 365 dias)...');
     const date365DaysAgo = new Date();
     date365DaysAgo.setDate(date365DaysAgo.getDate() - 365);
     
@@ -103,8 +133,19 @@ Deno.serve(async (req) => {
       console.log('  ✓ Preços antigos removidos');
     }
 
+    const { error: deleteOldMcapError } = await supabase
+      .from('crypto_market_cap')
+      .delete()
+      .lt('date', date365DaysAgo.toISOString().split('T')[0]);
+
+    if (deleteOldMcapError) {
+      console.error('Erro ao remover market cap antigo:', deleteOldMcapError);
+    } else {
+      console.log('  ✓ Market cap antigo removido');
+    }
+
     // 3. Atualizar Market Cap total dos últimos 7 dias
-    console.log('💰 Buscando histórico de Market Cap...');
+    console.log('💰 Buscando histórico de Market Cap total...');
     const mcapResponse = await fetch(
       'https://api.coingecko.com/api/v3/global/market_cap_chart?days=7'
     );
@@ -113,7 +154,7 @@ Deno.serve(async (req) => {
       const mcapData = await mcapResponse.json();
       const marketCapHistory = mcapData.market_cap_chart?.usd || [];
 
-      console.log(`  ✓ Market Cap: ${marketCapHistory.length} dias de histórico`);
+      console.log(`  ✓ Market Cap Total: ${marketCapHistory.length} dias de histórico`);
 
       // Inserir/atualizar market cap
       for (let i = 0; i < marketCapHistory.length; i++) {
@@ -138,27 +179,27 @@ Deno.serve(async (req) => {
           });
 
         if (error) {
-          console.error(`Erro ao inserir market cap ${date}:`, error);
+          console.error(`Erro ao inserir market cap total ${date}:`, error);
         }
       }
     } else {
-      console.error('❌ Erro ao buscar market cap:', mcapResponse.status);
+      console.error('❌ Erro ao buscar market cap total:', mcapResponse.status);
     }
 
-    // 4. Remover market cap com mais de 7 dias
-    console.log('🗑️ Removendo market cap antigo (> 7 dias)...');
+    // 4. Remover market cap total com mais de 7 dias
+    console.log('🗑️ Removendo market cap total antigo (> 7 dias)...');
     const date7DaysAgo = new Date();
     date7DaysAgo.setDate(date7DaysAgo.getDate() - 7);
     
-    const { error: deleteOldMcapError } = await supabase
+    const { error: deleteOldMcapTotalError } = await supabase
       .from('market_cap_history')
       .delete()
       .lt('date', date7DaysAgo.toISOString().split('T')[0]);
 
-    if (deleteOldMcapError) {
-      console.error('Erro ao remover market cap antigo:', deleteOldMcapError);
+    if (deleteOldMcapTotalError) {
+      console.error('Erro ao remover market cap total antigo:', deleteOldMcapTotalError);
     } else {
-      console.log('  ✓ Market cap antigo removido');
+      console.log('  ✓ Market cap total antigo removido');
     }
 
     console.log('✅ Atualização completa!');

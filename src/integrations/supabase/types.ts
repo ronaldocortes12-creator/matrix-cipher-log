@@ -76,6 +76,75 @@ export type Database = {
         }
         Relationships: []
       }
+      crypto_market_cap: {
+        Row: {
+          coin_id: string
+          created_at: string | null
+          date: string
+          id: string
+          market_cap: number
+          market_cap_change: number | null
+          symbol: string
+        }
+        Insert: {
+          coin_id: string
+          created_at?: string | null
+          date: string
+          id?: string
+          market_cap: number
+          market_cap_change?: number | null
+          symbol: string
+        }
+        Update: {
+          coin_id?: string
+          created_at?: string | null
+          date?: string
+          id?: string
+          market_cap?: number
+          market_cap_change?: number | null
+          symbol?: string
+        }
+        Relationships: []
+      }
+      crypto_probabilities: {
+        Row: {
+          calculation_date: string
+          coin_id: string
+          created_at: string | null
+          direction: string
+          final_probability: number
+          id: string
+          market_cap_component: number
+          price_component: number
+          probability_percentage: number
+          symbol: string
+        }
+        Insert: {
+          calculation_date?: string
+          coin_id: string
+          created_at?: string | null
+          direction: string
+          final_probability: number
+          id?: string
+          market_cap_component: number
+          price_component: number
+          probability_percentage: number
+          symbol: string
+        }
+        Update: {
+          calculation_date?: string
+          coin_id?: string
+          created_at?: string | null
+          direction?: string
+          final_probability?: number
+          id?: string
+          market_cap_component?: number
+          price_component?: number
+          probability_percentage?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       lesson_progress: {
         Row: {
           completed: boolean | null

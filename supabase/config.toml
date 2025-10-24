@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.update-crypto-data]
 verify_jwt = false
+
+[functions.calculate-crypto-probabilities]
+verify_jwt = false
