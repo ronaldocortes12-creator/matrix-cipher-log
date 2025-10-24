@@ -96,26 +96,50 @@ const Market = () => {
         return;
       }
 
-      // Se não houver dados suficientes, disparar cálculo agora e refazer a consulta
-      const uniqueCount = new Set((probabilities || []).map((p: any) => p.symbol)).size;
-      if (uniqueCount < cryptoList.length) {
-        console.log(`[MARKET] ⚠️ Apenas ${uniqueCount}/${cryptoList.length} com dados. Disparando cálculo agora...`);
-        toast({ title: 'Atualizando dados', description: 'Calculando probabilidades agora...', duration: 3500 });
+      // Se não houver dados suficientes, disparar cálculo agora e refazer a consulta com polling
+      const needCount = cryptoList.length;
+      let symCount = new Set((probabilities || []).map((p: any) => p.symbol)).size;
+      if (symCount < needCount) {
+        console.log(`[MARKET] ⚠️ Só ${symCount}/${needCount} com dados. Disparando cálculo agora + polling...`);
+        toast({ title: 'Atualizando dados', description: 'Calculando probabilidades...', duration: 3000 });
         try {
           await supabase.functions.invoke('calculate-crypto-probabilities', { body: {} });
-          // pequena espera para o banco consolidar
-          await new Promise((r) => setTimeout(r, 1200));
-          const refetch = await supabase
-            .from('crypto_probabilities')
-            .select('*')
-            .gte('calculation_date', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-            .order('calculation_date', { ascending: false });
-          if (!refetch.error) {
-            probabilities = refetch.data || [];
+          // Poll até completar ou timeout (30s)
+          const start = Date.now();
+          while (Date.now() - start < 30000) {
+            const refetch = await supabase
+              .from('crypto_probabilities')
+              .select('*')
+              .gte('calculation_date', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+              .order('calculation_date', { ascending: false });
+            if (!refetch.error) {
+              probabilities = refetch.data || [];
+              symCount = new Set((probabilities || []).map((p: any) => p.symbol)).size;
+              if (symCount >= needCount) break;
+            }
+            await new Promise((r) => setTimeout(r, 2000));
           }
         } catch (e) {
           console.warn('[MARKET] Falha ao disparar cálculo imediato', e);
         }
+      }
+
+      // Fallback: se ainda tiver símbolos sem dado nas últimas 24h, buscar o último registro histórico por símbolo
+      const symbolsWithData = new Set((probabilities || []).map((p: any) => p.symbol));
+      const missing = cryptoList.map(c => c.symbol).filter(sym => !symbolsWithData.has(sym));
+      if (missing.length > 0) {
+        console.log(`[MARKET] 🔄 Buscando fallback histórico para: ${missing.join(', ')}`);
+        const results = await Promise.all(missing.map(async (sym) => {
+          const { data } = await supabase
+            .from('crypto_probabilities')
+            .select('*')
+            .eq('symbol', sym)
+            .order('calculation_date', { ascending: false })
+            .limit(1);
+          return data?.[0] || null;
+        }));
+        const extra = results.filter(Boolean) as any[];
+        probabilities = [...(probabilities || []), ...extra];
       }
 
       console.log('[MARKET] ✅ Probabilidades carregadas:', probabilities?.length || 0);
@@ -127,6 +151,7 @@ const Market = () => {
           probabilityMap.set(prob.symbol, prob);
         }
       });
+
 
       // Buscar preços atuais da CoinGecko
       let priceData: Record<string, any> = {};
