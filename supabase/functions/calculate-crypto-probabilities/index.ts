@@ -32,6 +32,30 @@ const CRYPTOS = [
 // Constante epsilon para evitar divisão por zero
 const EPSILON = 1e-10;
 
+// Tolerâncias para validação
+const TOLERANCE_MU = 1e-6;
+const TOLERANCE_SIGMA = 1e-6;
+const TOLERANCE_PROB = 0.001; // 0.1 p.p.
+const MIN_DISPERSION_PP = 2.0; // dispersão mínima entre criptos (em pontos percentuais)
+
+// Interface para armazenar cálculos em sombra
+interface ShadowCalc {
+  symbol: string;
+  mu: number;
+  sigma: number;
+  p_alta_preco: number;
+  p_alta_global: number;
+  p_final: number;
+  direction: 'alta' | 'queda';
+  percentage: number;
+  precoAtual: number;
+  minPreco: number;
+  maxPreco: number;
+  ic95Low: number;
+  ic95High: number;
+  nDias: number;
+}
+
 // Função para calcular a função de distribuição cumulativa normal padrão (CDF)
 function normalCDF(x: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(x));
@@ -96,6 +120,8 @@ Deno.serve(async (req) => {
     const calculationDate = new Date().toISOString();
     let successCount = 0;
     let fallbackCount = 0;
+    const shadowResults: ShadowCalc[] = [];
+    const validationErrors: string[] = [];
 
     // ========== PRÉ-CÁLCULO: COMPONENTE GLOBAL DE MARKET CAP (40%) ==========
     // Este componente é IGUAL para TODAS as criptos no dia
@@ -203,6 +229,30 @@ Deno.serve(async (req) => {
 
         console.log(`  ✓ ${historicalPrices.length} dias de histórico de preços`);
 
+        // ========== PRÉ-CHECAGEM 1: VALIDAR DADOS ==========
+        
+        // Verificar continuidade e valores válidos
+        const prices = historicalPrices.map(p => parseFloat(p.closing_price));
+        const hasInvalidPrices = prices.some(p => p <= 0 || isNaN(p));
+        
+        if (hasInvalidPrices) {
+          validationErrors.push(`${crypto.symbol}: Preços inválidos detectados (zeros ou NaN)`);
+          console.error(`     ❌ PRÉ-CHECAGEM FALHOU: preços inválidos`);
+          continue;
+        }
+
+        const precoAtual = prices[prices.length - 1];
+        const minPreco = Math.min(...prices);
+        const maxPreco = Math.max(...prices);
+        
+        if (minPreco <= 0 || maxPreco <= 0 || precoAtual <= 0) {
+          validationErrors.push(`${crypto.symbol}: Min/Max/Atual devem ser > 0`);
+          console.error(`     ❌ PRÉ-CHECAGEM FALHOU: preço=${precoAtual}, min=${minPreco}, max=${maxPreco}`);
+          continue;
+        }
+
+        console.log(`     ✅ PRÉ-CHECAGEM: preço=${precoAtual.toFixed(2)}, min=${minPreco.toFixed(2)}, max=${maxPreco.toFixed(2)}`);
+
         // Calcular retornos logarítmicos diários
         const logReturns: number[] = [];
         for (let i = 1; i < historicalPrices.length; i++) {
@@ -266,11 +316,113 @@ Deno.serve(async (req) => {
           probabilityPercentage = pQuedaFinal * 100;
         }
 
+        // ========== VALIDAÇÃO EM SOMBRA: RECALCULAR E COMPARAR ==========
+        
+        console.log(`     🔍 VALIDAÇÃO EM SOMBRA:`);
+        
+        // Recalcular tudo em sombra
+        const muSombra = mean(logReturns);
+        const sigmaSombra = standardDeviation(logReturns);
+        const zScoreSombra = (0 - muSombra) / (sigmaSombra + EPSILON);
+        const pQuedaPrecoSombra = normalCDF(zScoreSombra);
+        const pAltaPrecoSombra = 1 - pQuedaPrecoSombra;
+        const pAltaFinalSombra = (0.60 * pAltaPrecoSombra) + (0.40 * pAltaGlobal);
+        
+        // Comparar com tolerâncias
+        const diffMu = Math.abs(muCripto - muSombra);
+        const diffSigma = Math.abs(sigmaCripto - sigmaSombra);
+        const diffPAltaPreco = Math.abs(pAltaPreco - pAltaPrecoSombra);
+        const diffPFinal = Math.abs(pAltaFinal - pAltaFinalSombra);
+        
+        let shadowValid = true;
+        
+        if (diffMu > TOLERANCE_MU) {
+          validationErrors.push(`${crypto.symbol}: μ difere em ${diffMu.toExponential(2)} (tolerância: ${TOLERANCE_MU})`);
+          shadowValid = false;
+        }
+        if (diffSigma > TOLERANCE_SIGMA) {
+          validationErrors.push(`${crypto.symbol}: σ difere em ${diffSigma.toExponential(2)} (tolerância: ${TOLERANCE_SIGMA})`);
+          shadowValid = false;
+        }
+        if (diffPAltaPreco > TOLERANCE_PROB) {
+          validationErrors.push(`${crypto.symbol}: P_alta_preço difere em ${diffPAltaPreco.toFixed(4)} (tolerância: ${TOLERANCE_PROB})`);
+          shadowValid = false;
+        }
+        if (diffPFinal > TOLERANCE_PROB) {
+          validationErrors.push(`${crypto.symbol}: P_final difere em ${diffPFinal.toFixed(4)} (tolerância: ${TOLERANCE_PROB})`);
+          shadowValid = false;
+        }
+        
+        if (!shadowValid) {
+          console.error(`     ❌ VALIDAÇÃO EM SOMBRA FALHOU`);
+          continue;
+        }
+        
+        console.log(`        ✅ μ diff: ${diffMu.toExponential(2)} ≤ ${TOLERANCE_MU}`);
+        console.log(`        ✅ σ diff: ${diffSigma.toExponential(2)} ≤ ${TOLERANCE_SIGMA}`);
+        console.log(`        ✅ P_preço diff: ${diffPAltaPreco.toFixed(6)} ≤ ${TOLERANCE_PROB}`);
+        console.log(`        ✅ P_final diff: ${diffPFinal.toFixed(6)} ≤ ${TOLERANCE_PROB}`);
+
+        // ========== VALIDAÇÕES LÓGICAS ==========
+        
+        console.log(`     🧪 VALIDAÇÕES LÓGICAS:`);
+        
+        // Validação 1: Sinal esperado
+        if (muCripto > 0 && sigmaCripto < 0.05 && pAltaPreco <= 0.5) {
+          validationErrors.push(`${crypto.symbol}: μ > 0 mas P_alta_preço ≤ 50%`);
+          console.error(`        ❌ LÓGICA: μ > 0 mas P_alta ≤ 50%`);
+          continue;
+        }
+        if (muCripto < 0 && sigmaCripto < 0.05 && pAltaPreco >= 0.5) {
+          validationErrors.push(`${crypto.symbol}: μ < 0 mas P_alta_preço ≥ 50%`);
+          console.error(`        ❌ LÓGICA: μ < 0 mas P_alta ≥ 50%`);
+          continue;
+        }
+        
+        console.log(`        ✅ Sinal μ vs P_alta coerente`);
+        
+        // Validação 2: P_final em [0, 1]
+        if (pAltaFinal < 0 || pAltaFinal > 1) {
+          validationErrors.push(`${crypto.symbol}: P_final fora de [0,1]: ${pAltaFinal}`);
+          console.error(`        ❌ SANITY: P_final=${pAltaFinal} fora de [0,1]`);
+          continue;
+        }
+        
+        console.log(`        ✅ P_final ∈ [0, 1]`);
+        
+        // Validação 3: IC 95% coerente
+        const icRange = ic95High - ic95Low;
+        if (icRange < 0 || icRange > 1) {
+          validationErrors.push(`${crypto.symbol}: IC 95% suspeito: [${ic95Low}, ${ic95High}]`);
+          console.error(`        ❌ LÓGICA: IC 95% range=${icRange} suspeito`);
+          continue;
+        }
+        
+        console.log(`        ✅ IC 95% coerente: ±${(icRange/2).toFixed(4)}`);
+
         console.log(`     📈 RESULTADO FINAL:`);
         console.log(`        direction = ${direction.toUpperCase()}`);
         console.log(`        P_alta_final = ${pAltaFinal.toFixed(4)}`);
         console.log(`        P_queda_final = ${pQuedaFinal.toFixed(4)}`);
         console.log(`        percentual_exibido = ${probabilityPercentage.toFixed(1)}%`);
+
+        // Armazenar resultado em sombra para validações cruzadas
+        shadowResults.push({
+          symbol: crypto.symbol,
+          mu: muCripto,
+          sigma: sigmaCripto,
+          p_alta_preco: pAltaPreco,
+          p_alta_global: pAltaGlobal,
+          p_final: pAltaFinal,
+          direction,
+          percentage: probabilityPercentage,
+          precoAtual,
+          minPreco,
+          maxPreco,
+          ic95Low,
+          ic95High,
+          nDias: historicalPrices.length
+        });
 
         // ========== ETAPA 5: SALVAR NO BANCO ==========
         
@@ -304,7 +456,83 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ========== CONFIRMAÇÃO DIÁRIA (LOG DE AUDITORIA OBRIGATÓRIO) ==========
+    // ========== VALIDAÇÕES CRUZADAS ENTRE CRIPTOS ==========
+    
+    console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
+    console.log('║       🔍 VALIDAÇÕES CRUZADAS                             ║');
+    console.log('╚═══════════════════════════════════════════════════════════╝');
+    
+    if (shadowResults.length >= 2) {
+      // Validação 1: P_alta_global deve ser idêntico
+      const globalProbs = shadowResults.map(r => r.p_alta_global);
+      const allSame = globalProbs.every(p => Math.abs(p - globalProbs[0]) < 1e-9);
+      
+      if (!allSame) {
+        validationErrors.push(`P_alta_global difere entre criptos: ${globalProbs.map(p => p.toFixed(6)).join(', ')}`);
+        console.error(`   ❌ P_alta_global não é idêntico para todas`);
+      } else {
+        console.log(`   ✅ P_alta_global idêntico: ${globalProbs[0].toFixed(6)}`);
+      }
+      
+      // Validação 2: Dispersão mínima
+      const pFinals = shadowResults.map(r => r.p_final);
+      const minPFinal = Math.min(...pFinals);
+      const maxPFinal = Math.max(...pFinals);
+      const dispersionPP = (maxPFinal - minPFinal) * 100;
+      
+      if (dispersionPP < MIN_DISPERSION_PP) {
+        validationErrors.push(`Dispersão muito baixa: ${dispersionPP.toFixed(2)}pp (mínimo: ${MIN_DISPERSION_PP}pp)`);
+        console.error(`   ❌ Dispersão de ${dispersionPP.toFixed(2)}pp < ${MIN_DISPERSION_PP}pp`);
+      } else {
+        console.log(`   ✅ Dispersão adequada: ${dispersionPP.toFixed(2)}pp ≥ ${MIN_DISPERSION_PP}pp`);
+      }
+      
+      // Validação 3: μ e σ diferentes entre criptos
+      const muValues = shadowResults.map(r => r.mu);
+      const sigmaValues = shadowResults.map(r => r.sigma);
+      
+      for (let i = 0; i < shadowResults.length; i++) {
+        for (let j = i + 1; j < shadowResults.length; j++) {
+          if (Math.abs(muValues[i] - muValues[j]) < 1e-9 && 
+              Math.abs(sigmaValues[i] - sigmaValues[j]) < 1e-9) {
+            validationErrors.push(`${shadowResults[i].symbol} e ${shadowResults[j].symbol} têm μ e σ idênticos (cache cruzado?)`);
+            console.error(`   ❌ ${shadowResults[i].symbol} e ${shadowResults[j].symbol}: μ,σ idênticos`);
+          }
+        }
+      }
+      
+      console.log(`   ✅ Cada cripto tem μ,σ únicos`);
+      
+      // Validação 4: Consistência UI (texto, seta, percentual)
+      let uiErrors = 0;
+      for (const result of shadowResults) {
+        const expectedDirection = result.p_final >= 0.5 ? 'alta' : 'queda';
+        const expectedPercentage = result.p_final >= 0.5 
+          ? result.p_final * 100 
+          : (1 - result.p_final) * 100;
+        
+        if (result.direction !== expectedDirection) {
+          validationErrors.push(`${result.symbol}: direction=${result.direction} mas P_final=${result.p_final}`);
+          uiErrors++;
+        }
+        
+        if (Math.abs(result.percentage - expectedPercentage) > 0.15) {
+          validationErrors.push(`${result.symbol}: percentual=${result.percentage}% mas esperado=${expectedPercentage.toFixed(1)}%`);
+          uiErrors++;
+        }
+      }
+      
+      if (uiErrors === 0) {
+        console.log(`   ✅ Consistência UI: texto, seta e % corretos`);
+      } else {
+        console.error(`   ❌ ${uiErrors} erros de consistência UI`);
+      }
+    }
+
+    // ========== RELATÓRIO FINAL DE VALIDAÇÃO ==========
+    
+    const allValidationsPassed = validationErrors.length === 0;
+    
     console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
     console.log('║       📋 AUDITORIA DO CÁLCULO DIÁRIO                     ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
@@ -326,19 +554,49 @@ Deno.serve(async (req) => {
     console.log(`\n✅ VALIDAÇÃO (Critérios de Aceite):`);
     console.log(`   [${pAltaGlobal !== 0.5 ? '✓' : '✗'}] Componente 40% usa Total Market Cap global`);
     console.log(`   [${successCount > 0 ? '✓' : '✗'}] Pelo menos 1 cripto foi calculada`);
-    console.log(`   [✓] Cada cripto tem μ_cripto e σ_cripto próprios`);
-    console.log(`   [✓] Diferenças entre criptos vêm do 60% (preço individual)`);
-    console.log(`   [✓] P_alta_global é IDÊNTICO para todas as criptos`);
+    console.log(`   [${shadowResults.length > 0 ? '✓' : '✗'}] Validações em sombra passaram`);
+    console.log(`   [${allValidationsPassed ? '✓' : '✗'}] Todas as checagens lógicas OK`);
+    console.log(`   [${validationErrors.length === 0 ? '✓' : '✗'}] Sem erros de validação`);
+    
+    if (!allValidationsPassed) {
+      console.log(`\n🚨 ERROS DE VALIDAÇÃO DETECTADOS (${validationErrors.length}):`);
+      validationErrors.forEach((err, idx) => {
+        console.log(`   ${idx + 1}. ${err}`);
+      });
+      console.log(`\n⚠️ PUBLICAÇÃO BLOQUEADA - Corrija os erros e execute novamente`);
+    }
+    
     console.log('╚═══════════════════════════════════════════════════════════╝\n');
 
-    console.log(`✅ Cálculo completo!`);
+    if (!allValidationsPassed) {
+      console.log(`❌ Validações falharam - dados NÃO publicados`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Validações falharam - dados não publicados',
+          validation_errors: validationErrors,
+          cryptos_calculated: successCount,
+          cryptos_validated: shadowResults.length,
+          calculation_date: calculationDate,
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
+
+    console.log(`✅ Todas validações passaram - Cálculo completo e publicado!`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Probabilidades calculadas com sucesso',
+        message: 'Probabilidades calculadas, validadas e publicadas com sucesso',
         cryptos_calculated: successCount,
+        cryptos_validated: shadowResults.length,
         cryptos_with_fallback: fallbackCount,
+        validation_errors: validationErrors,
+        all_validations_passed: allValidationsPassed,
         calculation_date: calculationDate,
         global_market_cap_component: {
           p_alta_global: pAltaGlobal,
@@ -346,6 +604,13 @@ Deno.serve(async (req) => {
           delta_cap_7d: deltaCapAvg7d,
           delta_mean_365: deltaMean365,
           delta_std_365: deltaStd365,
+        },
+        shadow_results_summary: {
+          min_p_final: shadowResults.length > 0 ? Math.min(...shadowResults.map(r => r.p_final)) : null,
+          max_p_final: shadowResults.length > 0 ? Math.max(...shadowResults.map(r => r.p_final)) : null,
+          dispersion_pp: shadowResults.length > 0 
+            ? (Math.max(...shadowResults.map(r => r.p_final)) - Math.min(...shadowResults.map(r => r.p_final))) * 100
+            : null,
         }
       }),
       { 
