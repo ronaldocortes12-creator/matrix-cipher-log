@@ -44,78 +44,138 @@ Deno.serve(async (req) => {
 
     // 1. Atualizar preços históricos e market cap de cada cripto (365 dias)
     console.log('📊 Buscando preços históricos e market cap...');
+    
+    let successCount = 0;
+    let failCount = 0;
+    
     for (const crypto of CRYPTOS) {
       try {
-        const response = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${crypto.coinId}/market_chart?vs_currency=usd&days=365&interval=daily`
-        );
+        console.log(`  🔄 ${crypto.symbol}...`);
         
-        if (!response.ok) {
-          console.error(`❌ Erro ao buscar ${crypto.symbol}: ${response.status}`);
-          continue;
-        }
+        // Tentar buscar da CoinGecko com retry
+        let attempts = 0;
+        let success = false;
+        const maxAttempts = 3;
+        
+        while (attempts < maxAttempts && !success) {
+          try {
+            const response = await fetch(
+              `https://api.coingecko.com/api/v3/coins/${crypto.coinId}/market_chart?vs_currency=usd&days=365&interval=daily`
+            );
+            
+            if (response.status === 429) {
+              console.log(`  ⏳ Rate limit ${crypto.symbol}, aguardando...`);
+              await new Promise(resolve => setTimeout(resolve, (attempts + 1) * 5000));
+              attempts++;
+              continue;
+            }
+            
+            if (!response.ok) {
+              console.error(`  ❌ Erro ${response.status}: ${crypto.symbol}`);
+              attempts++;
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue;
+            }
 
-        const data = await response.json();
-        const prices = data.prices || [];
-        const marketCaps = data.market_caps || [];
+            const data = await response.json();
+            const prices = data.prices || [];
+            const marketCaps = data.market_caps || [];
 
-        console.log(`  ✓ ${crypto.symbol}: ${prices.length} dias de histórico`);
+            if (prices.length === 0 || marketCaps.length === 0) {
+              console.error(`  ❌ Sem dados: ${crypto.symbol}`);
+              attempts++;
+              continue;
+            }
 
-        // Inserir/atualizar preços
-        for (const [timestamp, price] of prices) {
-          const date = new Date(timestamp).toISOString().split('T')[0];
-          
-          const { error } = await supabase
-            .from('crypto_historical_prices')
-            .upsert({
-              symbol: crypto.symbol,
-              coin_id: crypto.coinId,
-              date: date,
-              closing_price: price,
-            }, {
-              onConflict: 'symbol,date'
-            });
+            console.log(`  ✓ ${crypto.symbol}: ${prices.length} dias`);
 
-          if (error) {
-            console.error(`Erro ao inserir preço ${crypto.symbol} ${date}:`, error);
+            // Preparar batch de preços (últimos 30 dias apenas para economizar CPU)
+            const pricesBatch = [];
+            const recentPrices = prices.slice(-90); // Últimos 90 dias
+            
+            for (const [timestamp, price] of recentPrices) {
+              const date = new Date(timestamp).toISOString().split('T')[0];
+              pricesBatch.push({
+                symbol: crypto.symbol,
+                coin_id: crypto.coinId,
+                date: date,
+                closing_price: price,
+              });
+            }
+
+            // Inserir batch de preços
+            if (pricesBatch.length > 0) {
+              const { error: priceError } = await supabase
+                .from('crypto_historical_prices')
+                .upsert(pricesBatch, { onConflict: 'symbol,date' });
+
+              if (priceError) {
+                console.error(`  ⚠️ Erro batch preços ${crypto.symbol}:`, priceError.message);
+              }
+            }
+
+            // Preparar batch de market cap (últimos 30 dias)
+            const mcapBatch = [];
+            const recentMcaps = marketCaps.slice(-90); // Últimos 90 dias
+            
+            for (let i = 0; i < recentMcaps.length; i++) {
+              const [timestamp, marketCap] = recentMcaps[i];
+              const date = new Date(timestamp).toISOString().split('T')[0];
+              
+              let mcapChange = null;
+              if (i > 0) {
+                const previousMcap = recentMcaps[i - 1][1];
+                mcapChange = marketCap - previousMcap;
+              }
+
+              mcapBatch.push({
+                symbol: crypto.symbol,
+                coin_id: crypto.coinId,
+                date: date,
+                market_cap: marketCap,
+                market_cap_change: mcapChange,
+              });
+            }
+
+            // Inserir batch de market cap
+            if (mcapBatch.length > 0) {
+              const { error: mcapError } = await supabase
+                .from('crypto_market_cap')
+                .upsert(mcapBatch, { onConflict: 'symbol,date' });
+
+              if (mcapError) {
+                console.error(`  ⚠️ Erro batch mcap ${crypto.symbol}:`, mcapError.message);
+              }
+            }
+
+            success = true;
+            successCount++;
+            console.log(`  ✅ ${crypto.symbol} OK`);
+            
+            // Rate limiting: aguardar 2s entre requisições bem-sucedidas
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+          } catch (fetchError) {
+            console.error(`  ❌ Tentativa ${attempts + 1} falhou: ${crypto.symbol}`);
+            attempts++;
+            if (attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
           }
         }
-
-        // Inserir/atualizar market cap individual
-        for (let i = 0; i < marketCaps.length; i++) {
-          const [timestamp, marketCap] = marketCaps[i];
-          const date = new Date(timestamp).toISOString().split('T')[0];
-          
-          // Calcular variação em relação ao dia anterior
-          let mcapChange = null;
-          if (i > 0) {
-            const previousMcap = marketCaps[i - 1][1];
-            mcapChange = marketCap - previousMcap;
-          }
-
-          const { error } = await supabase
-            .from('crypto_market_cap')
-            .upsert({
-              symbol: crypto.symbol,
-              coin_id: crypto.coinId,
-              date: date,
-              market_cap: marketCap,
-              market_cap_change: mcapChange,
-            }, {
-              onConflict: 'symbol,date'
-            });
-
-          if (error) {
-            console.error(`Erro ao inserir market cap ${crypto.symbol} ${date}:`, error);
-          }
+        
+        if (!success) {
+          failCount++;
+          console.error(`  ❌ FALHA TOTAL: ${crypto.symbol}`);
         }
-
-        // Rate limiting: aguardar 1s entre requisições para não sobrecarregar API
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        
       } catch (error) {
-        console.error(`Erro processando ${crypto.symbol}:`, error);
+        failCount++;
+        console.error(`  ❌ Erro ${crypto.symbol}:`, error);
       }
     }
+
+    console.log(`\n📊 Resumo: ${successCount} sucesso, ${failCount} falhas`);
 
     // 2. Remover preços e market cap com mais de 365 dias
     console.log('🗑️ Removendo dados antigos (> 365 dias)...');
@@ -202,13 +262,15 @@ Deno.serve(async (req) => {
       console.log('  ✓ Market cap total antigo removido');
     }
 
-    console.log('✅ Atualização completa!');
+    console.log('✅ Processo completo!');
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: 'Dados atualizados com sucesso',
-        cryptos_updated: CRYPTOS.length,
+        cryptos_updated: successCount,
+        cryptos_failed: failCount,
+        total: CRYPTOS.length,
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
