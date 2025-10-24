@@ -156,40 +156,67 @@ export type Database = {
       }
       crypto_probabilities: {
         Row: {
+          ath_date: string | null
           calculation_date: string
           coin_id: string
           created_at: string | null
+          current_price: number | null
           direction: string
           final_probability: number
+          ic_95_high: number | null
+          ic_95_low: number | null
           id: string
           market_cap_component: number
+          max_ath: number | null
+          min_365d: number | null
+          mu_cripto: number | null
           price_component: number
           probability_percentage: number
+          sigma_cripto: number | null
           symbol: string
+          validation_status: string | null
         }
         Insert: {
+          ath_date?: string | null
           calculation_date?: string
           coin_id: string
           created_at?: string | null
+          current_price?: number | null
           direction: string
           final_probability: number
+          ic_95_high?: number | null
+          ic_95_low?: number | null
           id?: string
           market_cap_component: number
+          max_ath?: number | null
+          min_365d?: number | null
+          mu_cripto?: number | null
           price_component: number
           probability_percentage: number
+          sigma_cripto?: number | null
           symbol: string
+          validation_status?: string | null
         }
         Update: {
+          ath_date?: string | null
           calculation_date?: string
           coin_id?: string
           created_at?: string | null
+          current_price?: number | null
           direction?: string
           final_probability?: number
+          ic_95_high?: number | null
+          ic_95_low?: number | null
           id?: string
           market_cap_component?: number
+          max_ath?: number | null
+          min_365d?: number | null
+          mu_cripto?: number | null
           price_component?: number
           probability_percentage?: number
+          sigma_cripto?: number | null
           symbol?: string
+          validation_status?: string | null
         }
         Relationships: []
       }

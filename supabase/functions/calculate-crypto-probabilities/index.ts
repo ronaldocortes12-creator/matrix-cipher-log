@@ -54,6 +54,8 @@ interface ShadowCalc {
   ic95Low: number;
   ic95High: number;
   nDias: number;
+  athPrice: number;
+  athDate: string | null;
 }
 
 // Função para calcular a função de distribuição cumulativa normal padrão (CDF)
@@ -101,6 +103,31 @@ async function fetchFallbackData(coinId: string, symbol: string) {
   } catch (error) {
     console.error(`  ❌ Fallback falhou para ${symbol}:`, error);
     return { prices: [], marketCaps: [] };
+  }
+}
+
+// Função para buscar ATH (All-Time High) da CoinGecko
+async function fetchATH(coinId: string, symbol: string) {
+  try {
+    console.log(`  🏆 Buscando ATH real para ${symbol}...`);
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`CoinGecko API failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const ath = data.market_data?.ath?.usd || 0;
+    const athDate = data.market_data?.ath_date?.usd || null;
+    
+    console.log(`  ✓ ATH ${symbol}: $${ath.toFixed(2)} em ${athDate}`);
+    
+    return { ath, athDate };
+  } catch (error) {
+    console.error(`  ❌ Falha ao buscar ATH para ${symbol}:`, error);
+    return { ath: 0, athDate: null };
   }
 }
 
@@ -229,7 +256,20 @@ Deno.serve(async (req) => {
 
         console.log(`  ✓ ${historicalPrices.length} dias de histórico de preços`);
 
+        // ========== BUSCAR ATH (ALL-TIME HIGH) DA COINGECKO ==========
+        
+        const { ath: athPrice, athDate } = await fetchATH(crypto.coinId, crypto.symbol);
+        
+        // Validar ATH
+        if (athPrice <= 0 || !athDate) {
+          validationErrors.push(`${crypto.symbol}: ATH inválido (${athPrice}, ${athDate})`);
+          console.error(`     ❌ ATH INVÁLIDO: ${athPrice} em ${athDate}`);
+          continue;
+        }
+
         // ========== PRÉ-CHECAGEM 1: VALIDAR DADOS ==========
+        
+        console.log(`     🔍 PRÉ-CHECAGEM DE DADOS:`);
         
         // Verificar continuidade e valores válidos
         const prices = historicalPrices.map(p => parseFloat(p.closing_price));
@@ -237,21 +277,32 @@ Deno.serve(async (req) => {
         
         if (hasInvalidPrices) {
           validationErrors.push(`${crypto.symbol}: Preços inválidos detectados (zeros ou NaN)`);
-          console.error(`     ❌ PRÉ-CHECAGEM FALHOU: preços inválidos`);
+          console.error(`        ❌ Preços inválidos (zeros ou NaN)`);
           continue;
         }
 
         const precoAtual = prices[prices.length - 1];
         const minPreco = Math.min(...prices);
-        const maxPreco = Math.max(...prices);
+        const maxPreco365 = Math.max(...prices);
         
-        if (minPreco <= 0 || maxPreco <= 0 || precoAtual <= 0) {
-          validationErrors.push(`${crypto.symbol}: Min/Max/Atual devem ser > 0`);
-          console.error(`     ❌ PRÉ-CHECAGEM FALHOU: preço=${precoAtual}, min=${minPreco}, max=${maxPreco}`);
+        // Validação CRÍTICA: nenhum zero permitido
+        if (minPreco <= 0 || maxPreco365 <= 0 || precoAtual <= 0) {
+          validationErrors.push(`${crypto.symbol}: Preço/Min/Max devem ser > 0 (atual=${precoAtual}, min=${minPreco}, max=${maxPreco365})`);
+          console.error(`        ❌ Zeros detectados: preço=${precoAtual}, min=${minPreco}, max=${maxPreco365}`);
           continue;
         }
 
-        console.log(`     ✅ PRÉ-CHECAGEM: preço=${precoAtual.toFixed(2)}, min=${minPreco.toFixed(2)}, max=${maxPreco.toFixed(2)}`);
+        // Validação: ATH deve ser >= máximo observado em 365d
+        if (athPrice < maxPreco365) {
+          validationErrors.push(`${crypto.symbol}: ATH (${athPrice}) < máximo 365d (${maxPreco365})`);
+          console.error(`        ❌ ATH inconsistente: ${athPrice} < ${maxPreco365}`);
+          continue;
+        }
+
+        console.log(`        ✅ Preço atual: $${precoAtual.toFixed(6)}`);
+        console.log(`        ✅ Mín 365d: $${minPreco.toFixed(6)}`);
+        console.log(`        ✅ Máx 365d: $${maxPreco365.toFixed(6)}`);
+        console.log(`        ✅ ATH (histórico): $${athPrice.toFixed(6)} em ${athDate}`);
 
         // Calcular retornos logarítmicos diários
         const logReturns: number[] = [];
@@ -418,10 +469,12 @@ Deno.serve(async (req) => {
           percentage: probabilityPercentage,
           precoAtual,
           minPreco,
-          maxPreco,
+          maxPreco: maxPreco365,
           ic95Low,
           ic95High,
-          nDias: historicalPrices.length
+          nDias: historicalPrices.length,
+          athPrice,
+          athDate
         });
 
         // ========== ETAPA 5: SALVAR NO BANCO ==========
@@ -437,6 +490,15 @@ Deno.serve(async (req) => {
             price_component: pAltaPreco,
             market_cap_component: pAltaMcap,
             final_probability: pAltaFinal,
+            current_price: precoAtual,
+            min_365d: minPreco,
+            max_ath: athPrice,
+            ath_date: athDate,
+            mu_cripto: muCripto,
+            sigma_cripto: sigmaCripto,
+            ic_95_low: ic95Low,
+            ic_95_high: ic95High,
+            validation_status: 'approved'
           }, {
             onConflict: 'symbol,calculation_date'
           });
@@ -529,9 +591,67 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ========== RELATÓRIO FINAL DE VALIDAÇÃO ==========
+    // ========== SMOKE TEST PÓS-PUBLICAÇÃO ==========
     
-    const allValidationsPassed = validationErrors.length === 0;
+    let allValidationsPassed = validationErrors.length === 0;
+    
+    console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
+    console.log('║       🔬 SMOKE TEST PÓS-PUBLICAÇÃO                       ║');
+    console.log('╚═══════════════════════════════════════════════════════════╝');
+    
+    if (shadowResults.length > 0 && allValidationsPassed) {
+      let smokeTestFailed = false;
+      const smokeTestErrors: string[] = [];
+      
+      for (const result of shadowResults) {
+        // Verificar se algum valor crítico está zerado
+        if (result.precoAtual <= 0) {
+          smokeTestErrors.push(`${result.symbol}: Preço atual = $0`);
+          smokeTestFailed = true;
+        }
+        if (result.minPreco <= 0) {
+          smokeTestErrors.push(`${result.symbol}: Mín 365d = $0`);
+          smokeTestFailed = true;
+        }
+        if (result.athPrice <= 0) {
+          smokeTestErrors.push(`${result.symbol}: ATH = $0`);
+          smokeTestFailed = true;
+        }
+        
+        // Verificar coerência: ATH >= máximo 365d
+        if (result.athPrice < result.maxPreco) {
+          smokeTestErrors.push(`${result.symbol}: ATH ($${result.athPrice}) < Máx 365d ($${result.maxPreco})`);
+          smokeTestFailed = true;
+        }
+        
+        // Verificar coerência: direção vs percentual
+        const expectedDir = result.p_final >= 0.5 ? 'alta' : 'queda';
+        if (result.direction !== expectedDir) {
+          smokeTestErrors.push(`${result.symbol}: Direction=${result.direction} mas P_final=${result.p_final}`);
+          smokeTestFailed = true;
+        }
+      }
+      
+      if (smokeTestFailed) {
+        console.error(`   ❌ SMOKE TEST FALHOU - ${smokeTestErrors.length} erros detectados:`);
+        smokeTestErrors.forEach((err, idx) => {
+          console.error(`      ${idx + 1}. ${err}`);
+        });
+        console.error(`   ⚠️ REVERTENDO PUBLICAÇÃO - Dados inconsistentes`);
+        
+        allValidationsPassed = false;
+        validationErrors.push(...smokeTestErrors);
+      } else {
+        console.log(`   ✅ Smoke test passou: todos os ${shadowResults.length} cards válidos`);
+        console.log(`      • Preços > 0: ✓`);
+        console.log(`      • Mín 365d > 0: ✓`);
+        console.log(`      • ATH > 0: ✓`);
+        console.log(`      • ATH >= Máx 365d: ✓`);
+        console.log(`      • Direção coerente: ✓`);
+      }
+    }
+
+    // ========== RELATÓRIO FINAL DE VALIDAÇÃO ==========
     
     console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
     console.log('║       📋 AUDITORIA DO CÁLCULO DIÁRIO                     ║');
@@ -551,6 +671,19 @@ Deno.serve(async (req) => {
     console.log(`   • ${successCount} criptos calculadas com sucesso`);
     console.log(`   • ${fallbackCount} criptos usaram fallback (CoinGecko)`);
     console.log(`   • ${CRYPTOS.length - successCount} criptos falharam`);
+    console.log(`\n📊 DETALHAMENTO POR CRIPTO (${shadowResults.length}):`);
+    shadowResults.forEach((r, idx) => {
+      console.log(`   ${idx + 1}. ${r.symbol}:`);
+      console.log(`      • Preço atual: $${r.precoAtual.toFixed(6)}`);
+      console.log(`      • Mín 365d: $${r.minPreco.toFixed(6)}`);
+      console.log(`      • Máx 365d: $${r.maxPreco.toFixed(6)}`);
+      console.log(`      • ATH: $${r.athPrice.toFixed(6)} (${r.athDate})`);
+      console.log(`      • μ: ${r.mu.toFixed(6)}, σ: ${r.sigma.toFixed(6)}`);
+      console.log(`      • P(alta|preço): ${(r.p_alta_preco * 100).toFixed(2)}%`);
+      console.log(`      • P_final: ${(r.p_final * 100).toFixed(2)}%`);
+      console.log(`      • Direção: ${r.direction.toUpperCase()} (${r.percentage.toFixed(1)}%)`);
+    });
+    
     console.log(`\n✅ VALIDAÇÃO (Critérios de Aceite):`);
     console.log(`   [${pAltaGlobal !== 0.5 ? '✓' : '✗'}] Componente 40% usa Total Market Cap global`);
     console.log(`   [${successCount > 0 ? '✓' : '✗'}] Pelo menos 1 cripto foi calculada`);
