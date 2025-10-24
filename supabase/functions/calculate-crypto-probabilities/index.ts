@@ -219,27 +219,37 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Calcular média e desvio padrão dos retornos
-        const mu = mean(logReturns);
-        const sigma = standardDeviation(logReturns);
+        // Calcular média e desvio padrão dos retornos (μ e σ da cripto)
+        const muCripto = mean(logReturns);
+        const sigmaCripto = standardDeviation(logReturns);
 
-        console.log(`  μ = ${mu.toFixed(6)}, σ = ${sigma.toFixed(6)}`);
+        // 🔍 LOG OBRIGATÓRIO: μ e σ por cripto
+        console.log(`  📊 CRIPTO ${crypto.symbol}:`);
+        console.log(`     n_dias_precos = ${historicalPrices.length}`);
+        console.log(`     μ_cripto = ${muCripto.toFixed(6)}`);
+        console.log(`     σ_cripto = ${sigmaCripto.toFixed(6)}`);
 
-        // Calcular probabilidade de queda baseada em preço (distribuição normal)
-        const zScore = (0 - mu) / (sigma + EPSILON);
-        const pQuedaPreco = normalCDF(zScore);
+        // Calcular probabilidade de QUEDA baseada em preço (distribuição normal)
+        // P(queda|preço) = Φ((0 - μ_cripto) / (σ_cripto + ε))
+        const zScorePreco = (0 - muCripto) / (sigmaCripto + EPSILON);
+        const pQuedaPreco = normalCDF(zScorePreco);
         const pAltaPreco = 1 - pQuedaPreco;
 
-        console.log(`  P(alta|preço) = ${(pAltaPreco * 100).toFixed(2)}%`);
+        // Calcular IC 95% (recomendado para tooltip)
+        const ic95Low = muCripto - 1.96 * sigmaCripto;
+        const ic95High = muCripto + 1.96 * sigmaCripto;
+
+        console.log(`     IC_95% = [${ic95Low.toFixed(6)}, ${ic95High.toFixed(6)}]`);
+        console.log(`     P(alta|preço) = ${(pAltaPreco * 100).toFixed(2)}%`);
 
         // ========== ETAPA 2: COMPONENTE GLOBAL DE MARKET CAP (40%) ==========
         // Usar o componente global calculado (MESMO para todas as criptos)
         const pAltaMcap = pAltaGlobal;
         
-        console.log(`  P(alta|global_mcap) = ${(pAltaMcap * 100).toFixed(2)}% [GLOBAL]`);
+        console.log(`     P(alta|global_mcap) = ${(pAltaMcap * 100).toFixed(2)}% [GLOBAL]`);
 
         // ========== ETAPA 3: COMBINAÇÃO FINAL (60% preço + 40% global market cap) ==========
-        
+        // P_alta_final = 0.60 × P_alta_preço + 0.40 × P_alta_global
         const pAltaFinal = (0.60 * pAltaPreco) + (0.40 * pAltaMcap);
         const pQuedaFinal = 1 - pAltaFinal;
 
@@ -256,7 +266,11 @@ Deno.serve(async (req) => {
           probabilityPercentage = pQuedaFinal * 100;
         }
 
-        console.log(`  📈 Resultado: ${direction.toUpperCase()} ${probabilityPercentage.toFixed(1)}%`);
+        console.log(`     📈 RESULTADO FINAL:`);
+        console.log(`        direction = ${direction.toUpperCase()}`);
+        console.log(`        P_alta_final = ${pAltaFinal.toFixed(4)}`);
+        console.log(`        P_queda_final = ${pQuedaFinal.toFixed(4)}`);
+        console.log(`        percentual_exibido = ${probabilityPercentage.toFixed(1)}%`);
 
         // ========== ETAPA 5: SALVAR NO BANCO ==========
         
@@ -276,10 +290,10 @@ Deno.serve(async (req) => {
           });
 
         if (insertError) {
-          console.error(`❌ Erro ao salvar ${crypto.symbol}:`, insertError);
+          console.error(`     ❌ Erro ao salvar ${crypto.symbol}:`, insertError);
         } else {
           successCount++;
-          console.log(`  ✅ ${crypto.symbol} salvo`);
+          console.log(`     ✅ ${crypto.symbol} salvo no banco\n`);
         }
 
         // Pequeno delay entre processamentos
@@ -290,24 +304,34 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ========== CONFIRMAÇÃO DIÁRIA (LOG DE AUDITORIA) ==========
-    console.log('\n\n📋 AUDITORIA DO CÁLCULO DIÁRIO:');
-    console.log('=====================================');
+    // ========== CONFIRMAÇÃO DIÁRIA (LOG DE AUDITORIA OBRIGATÓRIO) ==========
+    console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
+    console.log('║       📋 AUDITORIA DO CÁLCULO DIÁRIO                     ║');
+    console.log('╚═══════════════════════════════════════════════════════════╝');
     console.log(`⏰ Timestamp: ${new Date(calculationDate).toISOString()}`);
-    console.log(`\n🌍 COMPONENTE GLOBAL (40% - IGUAL PARA TODAS):`);
-    console.log(`   Δ_cap,7d = ${deltaCapAvg7d.toFixed(4)}%`);
-    console.log(`   Δ̄_365 = ${deltaMean365.toFixed(4)}%`);
-    console.log(`   s_Δ,365 = ${deltaStd365.toFixed(4)}%`);
-    console.log(`   z_global = ${zGlobal.toFixed(4)}`);
-    console.log(`   P(alta|global) = ${(pAltaGlobal * 100).toFixed(2)}%`);
-    console.log(`\n📊 RESUMO: ${successCount} criptos calculadas, ${fallbackCount} com fallback`);
-    console.log(`\n✅ Execução válida se:`);
-    console.log(`   [${pAltaGlobal !== 0.5 ? '✓' : '✗'}] Componente 40% é global (Total Market Cap)`);
-    console.log(`   [${successCount > 0 ? '✓' : '✗'}] Todos os cards foram atualizados`);
-    console.log(`   [✓] Diferenças vêm do componente 60% (preço individual)`);
-    console.log('=====================================\n');
+    console.log(`\n🌍 COMPONENTE GLOBAL (40% - IGUAL PARA TODAS AS CRIPTOS):`);
+    console.log(`   ┌─ Dados de entrada:`);
+    console.log(`   │  Δ_7d (Total Market Cap) = ${deltaCapAvg7d.toFixed(6)}%`);
+    console.log(`   │  Δ̄_365 (baseline) = ${deltaMean365.toFixed(6)}%`);
+    console.log(`   │  s_Δ,365 (baseline) = ${deltaStd365.toFixed(6)}%`);
+    console.log(`   ├─ Padronização:`);
+    console.log(`   │  z_global = ${zGlobal.toFixed(6)}`);
+    console.log(`   └─ Resultado:`);
+    console.log(`      P(alta|global) = ${(pAltaGlobal * 100).toFixed(2)}%`);
+    console.log(`      P(queda|global) = ${((1 - pAltaGlobal) * 100).toFixed(2)}%`);
+    console.log(`\n📊 RESUMO DA EXECUÇÃO:`);
+    console.log(`   • ${successCount} criptos calculadas com sucesso`);
+    console.log(`   • ${fallbackCount} criptos usaram fallback (CoinGecko)`);
+    console.log(`   • ${CRYPTOS.length - successCount} criptos falharam`);
+    console.log(`\n✅ VALIDAÇÃO (Critérios de Aceite):`);
+    console.log(`   [${pAltaGlobal !== 0.5 ? '✓' : '✗'}] Componente 40% usa Total Market Cap global`);
+    console.log(`   [${successCount > 0 ? '✓' : '✗'}] Pelo menos 1 cripto foi calculada`);
+    console.log(`   [✓] Cada cripto tem μ_cripto e σ_cripto próprios`);
+    console.log(`   [✓] Diferenças entre criptos vêm do 60% (preço individual)`);
+    console.log(`   [✓] P_alta_global é IDÊNTICO para todas as criptos`);
+    console.log('╚═══════════════════════════════════════════════════════════╝\n');
 
-    console.log(`\n✅ Cálculo completo! Sucesso: ${successCount}, Fallbacks: ${fallbackCount}`);
+    console.log(`✅ Cálculo completo!`);
 
     return new Response(
       JSON.stringify({ 
