@@ -49,6 +49,54 @@ export type Database = {
           },
         ]
       }
+      crypto_data_collection_status: {
+        Row: {
+          coin_id: string
+          created_at: string
+          current_days: number
+          id: string
+          last_successful_update: string | null
+          last_update_attempt: string | null
+          newest_date: string | null
+          oldest_date: string | null
+          retry_count: number
+          status: string
+          symbol: string
+          target_days: number
+          updated_at: string
+        }
+        Insert: {
+          coin_id: string
+          created_at?: string
+          current_days?: number
+          id?: string
+          last_successful_update?: string | null
+          last_update_attempt?: string | null
+          newest_date?: string | null
+          oldest_date?: string | null
+          retry_count?: number
+          status?: string
+          symbol: string
+          target_days?: number
+          updated_at?: string
+        }
+        Update: {
+          coin_id?: string
+          created_at?: string
+          current_days?: number
+          id?: string
+          last_successful_update?: string | null
+          last_update_attempt?: string | null
+          newest_date?: string | null
+          oldest_date?: string | null
+          retry_count?: number
+          status?: string
+          symbol?: string
+          target_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       crypto_historical_prices: {
         Row: {
           closing_price: number
@@ -142,6 +190,45 @@ export type Database = {
           price_component?: number
           probability_percentage?: number
           symbol?: string
+        }
+        Relationships: []
+      }
+      data_integrity_reports: {
+        Row: {
+          completion_percentage: number
+          created_at: string
+          cryptos_complete: number
+          cryptos_incomplete: number
+          details: Json
+          execution_time_ms: number | null
+          id: string
+          report_date: string
+          status: string
+          total_cryptos: number
+        }
+        Insert: {
+          completion_percentage: number
+          created_at?: string
+          cryptos_complete: number
+          cryptos_incomplete: number
+          details: Json
+          execution_time_ms?: number | null
+          id?: string
+          report_date: string
+          status: string
+          total_cryptos: number
+        }
+        Update: {
+          completion_percentage?: number
+          created_at?: string
+          cryptos_complete?: number
+          cryptos_incomplete?: number
+          details?: Json
+          execution_time_ms?: number | null
+          id?: string
+          report_date?: string
+          status?: string
+          total_cryptos?: number
         }
         Relationships: []
       }
