@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          ip_address: unknown
+          metadata: Json | null
+          new_data: Json | null
+          old_data: Json | null
+          record_id: string | null
+          table_name: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown
+          metadata?: Json | null
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown
+          metadata?: Json | null
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
@@ -283,6 +325,101 @@ export type Database = {
         }
         Relationships: []
       }
+      interaction_blocks: {
+        Row: {
+          block_category: string | null
+          block_tags: string[] | null
+          block_type: string
+          created_at: string | null
+          deleted_at: string | null
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          metadata: Json | null
+          module_id: string | null
+          started_at: string | null
+          user_id: string
+        }
+        Insert: {
+          block_category?: string | null
+          block_tags?: string[] | null
+          block_type: string
+          created_at?: string | null
+          deleted_at?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          metadata?: Json | null
+          module_id?: string | null
+          started_at?: string | null
+          user_id: string
+        }
+        Update: {
+          block_category?: string | null
+          block_tags?: string[] | null
+          block_type?: string
+          created_at?: string | null
+          deleted_at?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          metadata?: Json | null
+          module_id?: string | null
+          started_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interaction_blocks_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "jeff_wu_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jeff_wu_modules: {
+        Row: {
+          created_at: string | null
+          deleted_at: string | null
+          id: string
+          metadata: Json | null
+          module_data: Json | null
+          module_name: string
+          module_type: Database["public"]["Enums"]["module_type"]
+          order_index: number | null
+          status: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string
+          metadata?: Json | null
+          module_data?: Json | null
+          module_name: string
+          module_type: Database["public"]["Enums"]["module_type"]
+          order_index?: number | null
+          status?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string
+          metadata?: Json | null
+          module_data?: Json | null
+          module_name?: string
+          module_type?: Database["public"]["Enums"]["module_type"]
+          order_index?: number | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       lesson_progress: {
         Row: {
           completed: boolean | null
@@ -366,36 +503,120 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_status: Database["public"]["Enums"]["account_status"] | null
           age: number | null
           avatar_url: string | null
           created_at: string | null
           crypto_experience: string | null
+          deleted_at: string | null
+          email_verified: boolean | null
           full_name: string | null
           id: string
+          last_login_at: string | null
+          metadata: Json | null
+          preferences: Json | null
           updated_at: string | null
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          account_status?: Database["public"]["Enums"]["account_status"] | null
+          age?: number | null
+          avatar_url?: string | null
+          created_at?: string | null
+          crypto_experience?: string | null
+          deleted_at?: string | null
+          email_verified?: boolean | null
+          full_name?: string | null
+          id?: string
+          last_login_at?: string | null
+          metadata?: Json | null
+          preferences?: Json | null
+          updated_at?: string | null
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          account_status?: Database["public"]["Enums"]["account_status"] | null
+          age?: number | null
+          avatar_url?: string | null
+          created_at?: string | null
+          crypto_experience?: string | null
+          deleted_at?: string | null
+          email_verified?: boolean | null
+          full_name?: string | null
+          id?: string
+          last_login_at?: string | null
+          metadata?: Json | null
+          preferences?: Json | null
+          updated_at?: string | null
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      user_interactions: {
+        Row: {
+          action_data: Json | null
+          action_name: string
+          block_id: string | null
+          deleted_at: string | null
+          id: string
+          interaction_type: Database["public"]["Enums"]["interaction_type"]
+          ip_address: unknown
+          metadata: Json | null
+          module_id: string | null
+          result_data: Json | null
+          timestamp: string | null
+          user_agent: string | null
           user_id: string
         }
         Insert: {
-          age?: number | null
-          avatar_url?: string | null
-          created_at?: string | null
-          crypto_experience?: string | null
-          full_name?: string | null
+          action_data?: Json | null
+          action_name: string
+          block_id?: string | null
+          deleted_at?: string | null
           id?: string
-          updated_at?: string | null
+          interaction_type: Database["public"]["Enums"]["interaction_type"]
+          ip_address?: unknown
+          metadata?: Json | null
+          module_id?: string | null
+          result_data?: Json | null
+          timestamp?: string | null
+          user_agent?: string | null
           user_id: string
         }
         Update: {
-          age?: number | null
-          avatar_url?: string | null
-          created_at?: string | null
-          crypto_experience?: string | null
-          full_name?: string | null
+          action_data?: Json | null
+          action_name?: string
+          block_id?: string | null
+          deleted_at?: string | null
           id?: string
-          updated_at?: string | null
+          interaction_type?: Database["public"]["Enums"]["interaction_type"]
+          ip_address?: unknown
+          metadata?: Json | null
+          module_id?: string | null
+          result_data?: Json | null
+          timestamp?: string | null
+          user_agent?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_interactions_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "interaction_blocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_interactions_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "jeff_wu_modules"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_preferences: {
         Row: {
@@ -421,15 +642,136 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          granted_at: string | null
+          granted_by: string | null
+          id: string
+          metadata: Json | null
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          granted_at?: string | null
+          granted_by?: string | null
+          id?: string
+          metadata?: Json | null
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          granted_at?: string | null
+          granted_by?: string | null
+          id?: string
+          metadata?: Json | null
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_sessions: {
+        Row: {
+          created_at: string | null
+          device_info: Json | null
+          ended_at: string | null
+          id: string
+          ip_address: unknown
+          is_active: boolean | null
+          last_activity_at: string | null
+          metadata: Json | null
+          session_token: string
+          started_at: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          device_info?: Json | null
+          ended_at?: string | null
+          id?: string
+          ip_address?: unknown
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          metadata?: Json | null
+          session_token: string
+          started_at?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          device_info?: Json | null
+          ended_at?: string | null
+          id?: string
+          ip_address?: unknown
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          metadata?: Json | null
+          session_token?: string
+          started_at?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      backend_health_check: { Args: never; Returns: Json }
+      create_user_session: {
+        Args: {
+          p_device_info?: Json
+          p_ip_address?: unknown
+          p_session_token: string
+          p_user_agent?: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
+      soft_delete_user: { Args: { target_user_id: string }; Returns: boolean }
+      update_session_activity: {
+        Args: { p_session_token: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      account_status:
+        | "active"
+        | "inactive"
+        | "suspended"
+        | "pending_verification"
+      app_role: "admin" | "moderator" | "user"
+      interaction_type:
+        | "view"
+        | "click"
+        | "input"
+        | "submit"
+        | "navigation"
+        | "error"
+        | "success"
+      module_type:
+        | "lesson"
+        | "chat"
+        | "market"
+        | "dashboard"
+        | "crypto_analysis"
+        | "portfolio"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -556,6 +898,31 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      account_status: [
+        "active",
+        "inactive",
+        "suspended",
+        "pending_verification",
+      ],
+      app_role: ["admin", "moderator", "user"],
+      interaction_type: [
+        "view",
+        "click",
+        "input",
+        "submit",
+        "navigation",
+        "error",
+        "success",
+      ],
+      module_type: [
+        "lesson",
+        "chat",
+        "market",
+        "dashboard",
+        "crypto_analysis",
+        "portfolio",
+      ],
+    },
   },
 } as const
