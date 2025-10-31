@@ -7,12 +7,16 @@ import logo from "@/assets/logo-main.png";
 import { Lock, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
+import type { Language } from "@/i18n/translations";
 
 const Index = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { t, language, setLanguage } = useLanguage();
+  const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
 
   // Verificar se usuário já está logado
   useEffect(() => {
@@ -58,6 +62,10 @@ const Index = () => {
           .eq('user_id', data.user.id)
           .maybeSingle();
 
+        toast({
+          title: t('login.loginSuccess'),
+        });
+
         if (preferences?.has_seen_welcome) {
           window.location.href = "/chat";
         } else {
@@ -66,7 +74,7 @@ const Index = () => {
       }
     } catch (error: any) {
       toast({
-        title: "Erro ao fazer login",
+        title: t('login.loginError'),
         description: error.message,
         variant: "destructive",
       });
@@ -87,21 +95,26 @@ const Index = () => {
       if (error) throw error;
 
       toast({
-        title: "Conta criada com sucesso",
-        description: "Redirecionando para o início do onboarding...",
+        title: t('login.signupSuccess'),
+        description: t('login.signupDescription'),
       });
 
       // Redireciona para o onboarding inicial
       window.location.href = "/welcome/1";
     } catch (error: any) {
       toast({
-        title: "Erro ao cadastrar",
+        title: t('login.signupError'),
         description: error.message,
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLanguageChange = async (lang: Language) => {
+    setSelectedLanguage(lang);
+    await setLanguage(lang);
   };
 
   return (
@@ -153,13 +166,41 @@ const Index = () => {
             />
           </div>
 
+          {/* Language Selector */}
+          <div className="flex justify-center gap-2 mb-6 relative z-10">
+            {[
+              { code: 'pt' as Language, flag: '🇧🇷', name: 'PT' },
+              { code: 'en' as Language, flag: '🇺🇸', name: 'EN' },
+              { code: 'es' as Language, flag: '🇪🇸', name: 'ES' }
+            ].map(lang => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => handleLanguageChange(lang.code)}
+                className={`
+                  px-4 py-2 rounded-lg glass-effect
+                  border transition-all duration-300
+                  flex items-center gap-2
+                  hover:scale-105 hover:border-primary/50
+                  ${selectedLanguage === lang.code 
+                    ? 'border-primary/80 shadow-[0_0_20px_rgba(77,208,225,0.3)]' 
+                    : 'border-primary/20'
+                  }
+                `}
+              >
+                <span className="text-xl">{lang.flag}</span>
+                <span className="text-sm font-medium text-foreground">{lang.name}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="text-center mb-6 relative z-10">
             <h1 className="text-5xl font-bold mb-3 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
-              Acesso
+              {t('login.title')}
             </h1>
             <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-3"></div>
             <p className="text-muted-foreground text-base font-light leading-relaxed tracking-wide">
-              O futuro da análise cripto chegou, bem-vindo (a)
+              {t('login.subtitle')}
             </p>
           </div>
 
@@ -167,14 +208,14 @@ const Index = () => {
             {/* Email Field */}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground/90 text-sm font-medium tracking-wide">
-                E-mail
+                {t('login.email')}
               </Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary/60" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="seu@email.com"
+                  placeholder={t('login.emailPlaceholder')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
@@ -186,14 +227,14 @@ const Index = () => {
             {/* Password Field */}
             <div className="space-y-2">
               <Label htmlFor="password" className="text-foreground/90 text-sm font-medium tracking-wide">
-                Senha
+                {t('login.password')}
               </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-primary/60" />
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder={t('login.passwordPlaceholder')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10"
@@ -208,7 +249,7 @@ const Index = () => {
                 type="button"
                 className="text-sm text-primary hover:text-primary/80 transition-colors font-medium"
               >
-                Esqueceu a senha?
+                {t('login.forgotPassword')}
               </button>
             </div>
 
@@ -217,8 +258,9 @@ const Index = () => {
               type="submit"
               size="lg"
               className="w-full font-semibold tracking-wide"
+              disabled={isLoading}
             >
-              Entrar
+              {t('login.loginButton')}
             </Button>
 
             {/* Divider */}
@@ -227,20 +269,21 @@ const Index = () => {
                 <div className="w-full border-t border-primary/20"></div>
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">ou</span>
+                <span className="bg-card px-2 text-muted-foreground">{t('login.or')}</span>
               </div>
             </div>
 
             {/* Register Link */}
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
-                Não tem uma conta?{" "}
+                {t('login.noAccount')}{" "}
                 <button
                   type="button"
                   onClick={handleSignup}
                   className="text-primary hover:text-primary/80 font-medium transition-colors"
+                  disabled={isLoading}
                 >
-                  Cadastre-se
+                  {t('login.signupButton')}
                 </button>
               </p>
             </div>

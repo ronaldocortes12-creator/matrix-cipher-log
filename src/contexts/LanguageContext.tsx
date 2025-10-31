@@ -41,18 +41,20 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const setLanguage = async (lang: Language) => {
+    setLanguageState(lang);
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
-        const { error } = await supabase
+        await supabase
           .from('user_preferences')
-          .update({ language: lang })
-          .eq('user_id', user.id);
-
-        if (!error) {
-          setLanguageState(lang);
-        }
+          .upsert({ 
+            user_id: user.id, 
+            language: lang 
+          }, { 
+            onConflict: 'user_id' 
+          });
       }
     } catch (error) {
       console.error('Error setting language:', error);

@@ -1,18 +1,22 @@
 export const translations = {
   pt: {
-    // Login & Auth
     login: {
       title: "Acesso",
+      subtitle: "O futuro da análise cripto chegou, bem-vindo (a)",
       email: "E-mail",
+      emailPlaceholder: "seu@email.com",
       password: "Senha",
-      enterButton: "Entrar no Sistema",
+      passwordPlaceholder: "••••••••",
+      forgotPassword: "Esqueceu a senha?",
+      loginButton: "Entrar",
       noAccount: "Não tem uma conta?",
-      createAccount: "Criar Conta",
-      welcomeBack: "Bem-vindo de volta",
-      loginSuccess: "Login realizado com sucesso!",
-      signupSuccess: "Conta criada! Verifique seu e-mail.",
+      signupButton: "Cadastre-se",
+      or: "ou",
+      loginSuccess: "Login realizado com sucesso",
+      signupSuccess: "Conta criada com sucesso",
+      signupDescription: "Redirecionando para o início do onboarding...",
       loginError: "Erro ao fazer login",
-      signupError: "Erro ao criar conta",
+      signupError: "Erro ao cadastrar",
     },
     // Welcome Pages
     welcome: {
@@ -150,19 +154,23 @@ export const translations = {
     },
   },
   en: {
-    // Login & Auth
     login: {
       title: "Access",
+      subtitle: "The future of crypto analysis has arrived, welcome",
       email: "Email",
+      emailPlaceholder: "your@email.com",
       password: "Password",
-      enterButton: "Enter System",
+      passwordPlaceholder: "••••••••",
+      forgotPassword: "Forgot password?",
+      loginButton: "Login",
       noAccount: "Don't have an account?",
-      createAccount: "Create Account",
-      welcomeBack: "Welcome back",
-      loginSuccess: "Login successful!",
-      signupSuccess: "Account created! Check your email.",
+      signupButton: "Sign up",
+      or: "or",
+      loginSuccess: "Login successful",
+      signupSuccess: "Account created successfully",
+      signupDescription: "Redirecting to onboarding...",
       loginError: "Error logging in",
-      signupError: "Error creating account",
+      signupError: "Error signing up",
     },
     // Welcome Pages
     welcome: {
@@ -300,19 +308,23 @@ export const translations = {
     },
   },
   es: {
-    // Login & Auth
     login: {
       title: "Acceso",
+      subtitle: "El futuro del análisis cripto ha llegado, bienvenido (a)",
       email: "Correo electrónico",
+      emailPlaceholder: "tu@email.com",
       password: "Contraseña",
-      enterButton: "Entrar al Sistema",
+      passwordPlaceholder: "••••••••",
+      forgotPassword: "¿Olvidaste tu contraseña?",
+      loginButton: "Iniciar sesión",
       noAccount: "¿No tienes una cuenta?",
-      createAccount: "Crear Cuenta",
-      welcomeBack: "Bienvenido de nuevo",
-      loginSuccess: "¡Inicio de sesión exitoso!",
-      signupSuccess: "¡Cuenta creada! Verifica tu correo.",
+      signupButton: "Regístrate",
+      or: "o",
+      loginSuccess: "Inicio de sesión exitoso",
+      signupSuccess: "Cuenta creada exitosamente",
+      signupDescription: "Redirigiendo al inicio...",
       loginError: "Error al iniciar sesión",
-      signupError: "Error al crear la cuenta",
+      signupError: "Error al registrarse",
     },
     // Welcome Pages
     welcome: {
