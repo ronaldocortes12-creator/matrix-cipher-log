@@ -44,7 +44,8 @@ interface ShadowCalc {
   mu: number;
   sigma: number;
   p_alta_preco: number;
-  p_alta_global: number;
+  p_alta_var10d: number;
+  p_alta_global365d: number;
   p_final: number;
   direction: 'alta' | 'queda';
   percentage: number;
@@ -150,10 +151,63 @@ Deno.serve(async (req) => {
     const shadowResults: ShadowCalc[] = [];
     const validationErrors: string[] = [];
 
-    // ========== PRÉ-CÁLCULO: COMPONENTE GLOBAL DE MARKET CAP (40%) ==========
-    // Este componente é IGUAL para TODAS as criptos no dia
+    // ========== PRÉ-CÁLCULO 1: COMPONENTE DE VARIAÇÃO 10 DIAS (55%) ==========
+    // Este é o NOVO componente principal com lógica de inversão
     
-    console.log('\n🌍 Calculando componente global de market cap...');
+    console.log('\n💰 Calculando componente de variação de 10 dias (55%)...');
+    
+    // Buscar últimos 10 dias do Total Market Cap global
+    const { data: globalMcap10d, error: mcap10dError } = await supabase
+      .from('global_crypto_market_cap')
+      .select('date, total_market_cap')
+      .order('date', { ascending: false })
+      .limit(10);
+
+    let pAltaVariacao10d = 0.5; // Default neutro se não houver dados
+    let variacao10d = 0;
+    let mcapInicial = 0;
+    let mcapAtual = 0;
+
+    if (!mcap10dError && globalMcap10d && globalMcap10d.length >= 10) {
+      console.log(`  ✓ ${globalMcap10d.length} dias de histórico disponíveis`);
+      
+      // Calcular variação percentual de 10 dias
+      mcapInicial = parseFloat(globalMcap10d[9].total_market_cap as string); // 10 dias atrás
+      mcapAtual = parseFloat(globalMcap10d[0].total_market_cap as string); // hoje
+      variacao10d = ((mcapAtual - mcapInicial) / mcapInicial) * 100;
+      
+      console.log(`  📊 Market Cap 10d atrás: $${(mcapInicial / 1e12).toFixed(2)}T`);
+      console.log(`  📊 Market Cap atual: $${(mcapAtual / 1e12).toFixed(2)}T`);
+      console.log(`  📊 Variação 10 dias: ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
+      
+      // Aplicar lógica de INVERSÃO (contrarian strategy)
+      if (variacao10d <= -15) {
+        // Mercado caiu muito → Alta probabilidade de ALTA (oversold)
+        pAltaVariacao10d = 0.75 + (Math.abs(variacao10d) - 15) * 0.01;
+        pAltaVariacao10d = Math.min(pAltaVariacao10d, 0.95); // cap em 95%
+        console.log(`  🔴 OVERSOLD (caiu ${Math.abs(variacao10d).toFixed(1)}%) → Alta probabilidade de ALTA`);
+      } else if (variacao10d >= 15) {
+        // Mercado subiu muito → Alta probabilidade de QUEDA (overbought)
+        pAltaVariacao10d = 0.25 - (variacao10d - 15) * 0.01;
+        pAltaVariacao10d = Math.max(pAltaVariacao10d, 0.05); // floor em 5%
+        console.log(`  🟢 OVERBOUGHT (subiu ${variacao10d.toFixed(1)}%) → Alta probabilidade de QUEDA`);
+      } else {
+        // Transição linear entre -15% e +15%
+        // -15% = 75% alta, 0% = 50% alta, +15% = 25% alta
+        pAltaVariacao10d = 0.50 - (variacao10d / 30) * 0.25;
+        console.log(`  🟡 NEUTRO (variou ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(1)}%) → Transição linear`);
+      }
+      
+      console.log(`  💎 P(alta|variação_10d) = ${(pAltaVariacao10d * 100).toFixed(2)}%`);
+      console.log(`  ✅ Componente 10d (55%): MESMO para TODAS as criptos`);
+    } else {
+      console.log(`  ⚠️ Dados de 10 dias insuficientes (${globalMcap10d?.length || 0}/10), usando neutro (50%)`);
+    }
+
+    // ========== PRÉ-CÁLCULO 2: COMPONENTE GLOBAL DE MARKET CAP 365d (20%) ==========
+    // Componente baseado em baseline histórico de 365 dias
+    
+    console.log('\n🌍 Calculando componente global de market cap 365d (20%)...');
     
     // Buscar últimos 7 dias do Total Market Cap global
     const { data: globalMcap7d, error: mcap7dError } = await supabase
@@ -169,7 +223,7 @@ Deno.serve(async (req) => {
       .order('date', { ascending: false })
       .limit(365);
 
-    let pAltaGlobal = 0.5; // Default neutro se não houver dados
+    let pAltaGlobal365d = 0.5; // Default neutro se não houver dados
     let zGlobal = 0;
     let deltaCapAvg7d = 0;
     let deltaMean365 = 0;
@@ -205,21 +259,21 @@ Deno.serve(async (req) => {
         zGlobal = (deltaCapAvg7d - deltaMean365) / (deltaStd365 + EPSILON);
         
         // Converter z-score em probabilidade (sigmoide)
-        pAltaGlobal = 1 / (1 + Math.exp(-zGlobal));
+        pAltaGlobal365d = 1 / (1 + Math.exp(-zGlobal));
         
         console.log(`  z_global = ${zGlobal.toFixed(4)}`);
-        console.log(`  🌍 P(alta|global) = ${(pAltaGlobal * 100).toFixed(2)}%`);
-        console.log(`  ✅ Componente global: MESMO para TODAS as criptos`);
+        console.log(`  🌍 P(alta|global_365d) = ${(pAltaGlobal365d * 100).toFixed(2)}%`);
+        console.log(`  ✅ Componente global 365d: MESMO para TODAS as criptos`);
       }
     } else {
-      console.log(`  ⚠️ Dados globais insuficientes, usando neutro (50%)`);
+      console.log(`  ⚠️ Dados globais 365d insuficientes, usando neutro (50%)`);
     }
 
     for (const crypto of CRYPTOS) {
       try {
         console.log(`\n📊 Calculando ${crypto.symbol}...`);
 
-        // ========== ETAPA 1: COMPONENTE DE PREÇO (60%) ==========
+        // ========== ETAPA 1: COMPONENTE DE PREÇO (25%) ==========
         
         // Buscar histórico de 365 dias de preços
         const { data: priceData, error: priceError } = await supabase
@@ -343,18 +397,25 @@ Deno.serve(async (req) => {
         console.log(`     IC_95% = [${ic95Low.toFixed(6)}, ${ic95High.toFixed(6)}]`);
         console.log(`     P(alta|preço) = ${(pAltaPreco * 100).toFixed(2)}%`);
 
-        // ========== ETAPA 2: COMPONENTE GLOBAL DE MARKET CAP (40%) ==========
-        // Usar o componente global calculado (MESMO para todas as criptos)
-        const pAltaMcap = pAltaGlobal;
+        // ========== ETAPA 2: COMPONENTE GLOBAL DE MARKET CAP 365d (20%) ==========
+        // Usar o componente global 365d calculado (MESMO para todas as criptos)
+        const pAltaMcap365d = pAltaGlobal365d;
         
-        console.log(`     P(alta|global_mcap) = ${(pAltaMcap * 100).toFixed(2)}% [GLOBAL]`);
+        console.log(`     P(alta|global_mcap_365d) = ${(pAltaMcap365d * 100).toFixed(2)}% [GLOBAL]`);
 
-        // ========== ETAPA 3: COMBINAÇÃO FINAL (60% preço + 40% global market cap) ==========
-        // P_alta_final = 0.60 × P_alta_preço + 0.40 × P_alta_global
-        const pAltaFinal = (0.60 * pAltaPreco) + (0.40 * pAltaMcap);
+        // ========== ETAPA 3: COMPONENTE DE VARIAÇÃO 10 DIAS (55%) ==========
+        // Usar o componente de variação 10d calculado (MESMO para todas as criptos)
+        const pAltaVar10d = pAltaVariacao10d;
+        
+        console.log(`     P(alta|variação_10d) = ${(pAltaVar10d * 100).toFixed(2)}% [GLOBAL - INVERSÃO]`);
+        console.log(`        └─ Variação 10d: ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}% (${variacao10d <= -15 ? 'OVERSOLD' : variacao10d >= 15 ? 'OVERBOUGHT' : 'NEUTRO'})`);
+
+        // ========== ETAPA 4: COMBINAÇÃO FINAL (55% var10d + 25% preço + 20% global365d) ==========
+        // P_alta_final = 0.55 × P_alta_var10d + 0.25 × P_alta_preço + 0.20 × P_alta_global365d
+        const pAltaFinal = (0.55 * pAltaVar10d) + (0.25 * pAltaPreco) + (0.20 * pAltaMcap365d);
         const pQuedaFinal = 1 - pAltaFinal;
 
-        // ========== ETAPA 4: DEFINIÇÃO DO TEXTO E PERCENTUAL ==========
+        // ========== ETAPA 5: DEFINIÇÃO DO TEXTO E PERCENTUAL ==========
         
         let direction: 'alta' | 'queda';
         let probabilityPercentage: number;
@@ -371,13 +432,13 @@ Deno.serve(async (req) => {
         
         console.log(`     🔍 VALIDAÇÃO EM SOMBRA:`);
         
-        // Recalcular tudo em sombra
+        // Recalcular tudo em sombra com nova fórmula
         const muSombra = mean(logReturns);
         const sigmaSombra = standardDeviation(logReturns);
         const zScoreSombra = (0 - muSombra) / (sigmaSombra + EPSILON);
         const pQuedaPrecoSombra = normalCDF(zScoreSombra);
         const pAltaPrecoSombra = 1 - pQuedaPrecoSombra;
-        const pAltaFinalSombra = (0.60 * pAltaPrecoSombra) + (0.40 * pAltaGlobal);
+        const pAltaFinalSombra = (0.55 * pAltaVariacao10d) + (0.25 * pAltaPrecoSombra) + (0.20 * pAltaGlobal365d);
         
         // Comparar com tolerâncias
         const diffMu = Math.abs(muCripto - muSombra);
@@ -463,7 +524,8 @@ Deno.serve(async (req) => {
           mu: muCripto,
           sigma: sigmaCripto,
           p_alta_preco: pAltaPreco,
-          p_alta_global: pAltaGlobal,
+          p_alta_var10d: pAltaVar10d,
+          p_alta_global365d: pAltaMcap365d,
           p_final: pAltaFinal,
           direction,
           percentage: probabilityPercentage,
@@ -477,7 +539,7 @@ Deno.serve(async (req) => {
           athDate
         });
 
-        // ========== ETAPA 5: SALVAR NO BANCO ==========
+        // ========== ETAPA 6: SALVAR NO BANCO ==========
         
         const { error: insertError } = await supabase
           .from('crypto_probabilities')
@@ -488,7 +550,7 @@ Deno.serve(async (req) => {
             direction: direction,
             probability_percentage: parseFloat(probabilityPercentage.toFixed(1)),
             price_component: pAltaPreco,
-            market_cap_component: pAltaMcap,
+            market_cap_component: pAltaMcap365d,
             final_probability: pAltaFinal,
             current_price: precoAtual,
             min_365d: minPreco,
@@ -525,15 +587,25 @@ Deno.serve(async (req) => {
     console.log('╚═══════════════════════════════════════════════════════════╝');
     
     if (shadowResults.length >= 2) {
-      // Validação 1: P_alta_global deve ser idêntico
-      const globalProbs = shadowResults.map(r => r.p_alta_global);
-      const allSame = globalProbs.every(p => Math.abs(p - globalProbs[0]) < 1e-9);
+      // Validação 1: Componentes globais devem ser idênticos
+      const var10dProbs = shadowResults.map(r => r.p_alta_var10d);
+      const global365dProbs = shadowResults.map(r => r.p_alta_global365d);
       
-      if (!allSame) {
-        validationErrors.push(`P_alta_global difere entre criptos: ${globalProbs.map(p => p.toFixed(6)).join(', ')}`);
-        console.error(`   ❌ P_alta_global não é idêntico para todas`);
+      const allVar10dSame = var10dProbs.every(p => Math.abs(p - var10dProbs[0]) < 1e-9);
+      const allGlobal365dSame = global365dProbs.every(p => Math.abs(p - global365dProbs[0]) < 1e-9);
+      
+      if (!allVar10dSame) {
+        validationErrors.push(`P_alta_var10d difere entre criptos: ${var10dProbs.map(p => p.toFixed(6)).join(', ')}`);
+        console.error(`   ❌ P_alta_var10d não é idêntico para todas`);
       } else {
-        console.log(`   ✅ P_alta_global idêntico: ${globalProbs[0].toFixed(6)}`);
+        console.log(`   ✅ P_alta_var10d idêntico: ${var10dProbs[0].toFixed(6)}`);
+      }
+      
+      if (!allGlobal365dSame) {
+        validationErrors.push(`P_alta_global365d difere entre criptos: ${global365dProbs.map(p => p.toFixed(6)).join(', ')}`);
+        console.error(`   ❌ P_alta_global365d não é idêntico para todas`);
+      } else {
+        console.log(`   ✅ P_alta_global365d idêntico: ${global365dProbs[0].toFixed(6)}`);
       }
       
       // Validação 2: Dispersão mínima
@@ -657,7 +729,26 @@ Deno.serve(async (req) => {
     console.log('║       📋 AUDITORIA DO CÁLCULO DIÁRIO                     ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
     console.log(`⏰ Timestamp: ${new Date(calculationDate).toISOString()}`);
-    console.log(`\n🌍 COMPONENTE GLOBAL (40% - IGUAL PARA TODAS AS CRIPTOS):`);
+    console.log(`\n💰 COMPONENTE VARIAÇÃO 10 DIAS (55% - IGUAL PARA TODAS):`);
+    console.log(`   ┌─ Dados de entrada:`);
+    console.log(`   │  Market Cap inicial (10d atrás) = $${(mcapInicial / 1e12).toFixed(2)}T`);
+    console.log(`   │  Market Cap atual = $${(mcapAtual / 1e12).toFixed(2)}T`);
+    console.log(`   │  Variação 10 dias = ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
+    console.log(`   ├─ Lógica de Inversão:`);
+    if (variacao10d <= -15) {
+      console.log(`   │  Status: OVERSOLD (caiu >${Math.abs(variacao10d).toFixed(1)}%)`);
+      console.log(`   │  Estratégia: Contrarian - comprar no pânico`);
+    } else if (variacao10d >= 15) {
+      console.log(`   │  Status: OVERBOUGHT (subiu >${variacao10d.toFixed(1)}%)`);
+      console.log(`   │  Estratégia: Contrarian - vender na euforia`);
+    } else {
+      console.log(`   │  Status: NEUTRO (variação moderada)`);
+      console.log(`   │  Estratégia: Transição linear`);
+    }
+    console.log(`   └─ Resultado:`);
+    console.log(`      P(alta|var10d) = ${(pAltaVariacao10d * 100).toFixed(2)}%`);
+    console.log(`      P(queda|var10d) = ${((1 - pAltaVariacao10d) * 100).toFixed(2)}%`);
+    console.log(`\n🌍 COMPONENTE GLOBAL 365d (20% - IGUAL PARA TODAS):`);
     console.log(`   ┌─ Dados de entrada:`);
     console.log(`   │  Δ_7d (Total Market Cap) = ${deltaCapAvg7d.toFixed(6)}%`);
     console.log(`   │  Δ̄_365 (baseline) = ${deltaMean365.toFixed(6)}%`);
@@ -665,8 +756,8 @@ Deno.serve(async (req) => {
     console.log(`   ├─ Padronização:`);
     console.log(`   │  z_global = ${zGlobal.toFixed(6)}`);
     console.log(`   └─ Resultado:`);
-    console.log(`      P(alta|global) = ${(pAltaGlobal * 100).toFixed(2)}%`);
-    console.log(`      P(queda|global) = ${((1 - pAltaGlobal) * 100).toFixed(2)}%`);
+    console.log(`      P(alta|global365d) = ${(pAltaGlobal365d * 100).toFixed(2)}%`);
+    console.log(`      P(queda|global365d) = ${((1 - pAltaGlobal365d) * 100).toFixed(2)}%`);
     console.log(`\n📊 RESUMO DA EXECUÇÃO:`);
     console.log(`   • ${successCount} criptos calculadas com sucesso`);
     console.log(`   • ${fallbackCount} criptos usaram fallback (CoinGecko)`);
@@ -679,13 +770,16 @@ Deno.serve(async (req) => {
       console.log(`      • Máx 365d: $${r.maxPreco.toFixed(6)}`);
       console.log(`      • ATH: $${r.athPrice.toFixed(6)} (${r.athDate})`);
       console.log(`      • μ: ${r.mu.toFixed(6)}, σ: ${r.sigma.toFixed(6)}`);
-      console.log(`      • P(alta|preço): ${(r.p_alta_preco * 100).toFixed(2)}%`);
+      console.log(`      • P(alta|preço) [25%]: ${(r.p_alta_preco * 100).toFixed(2)}%`);
+      console.log(`      • P(alta|var10d) [55%]: ${(r.p_alta_var10d * 100).toFixed(2)}%`);
+      console.log(`      • P(alta|global365d) [20%]: ${(r.p_alta_global365d * 100).toFixed(2)}%`);
       console.log(`      • P_final: ${(r.p_final * 100).toFixed(2)}%`);
       console.log(`      • Direção: ${r.direction.toUpperCase()} (${r.percentage.toFixed(1)}%)`);
     });
     
     console.log(`\n✅ VALIDAÇÃO (Critérios de Aceite):`);
-    console.log(`   [${pAltaGlobal !== 0.5 ? '✓' : '✗'}] Componente 40% usa Total Market Cap global`);
+    console.log(`   [${pAltaVariacao10d !== 0.5 ? '✓' : '✗'}] Componente 55% usa variação 10d (inversão)`);
+    console.log(`   [${pAltaGlobal365d !== 0.5 ? '✓' : '✗'}] Componente 20% usa Total Market Cap global 365d`);
     console.log(`   [${successCount > 0 ? '✓' : '✗'}] Pelo menos 1 cripto foi calculada`);
     console.log(`   [${shadowResults.length > 0 ? '✓' : '✗'}] Validações em sombra passaram`);
     console.log(`   [${allValidationsPassed ? '✓' : '✗'}] Todas as checagens lógicas OK`);
@@ -731,12 +825,25 @@ Deno.serve(async (req) => {
         validation_errors: validationErrors,
         all_validations_passed: allValidationsPassed,
         calculation_date: calculationDate,
-        global_market_cap_component: {
-          p_alta_global: pAltaGlobal,
+        variacao_10d_component: {
+          p_alta_var10d: pAltaVariacao10d,
+          variacao_10d_pct: variacao10d,
+          mcap_inicial: mcapInicial,
+          mcap_atual: mcapAtual,
+          peso: '55%'
+        },
+        global_365d_component: {
+          p_alta_global365d: pAltaGlobal365d,
           z_global: zGlobal,
           delta_cap_7d: deltaCapAvg7d,
           delta_mean_365: deltaMean365,
           delta_std_365: deltaStd365,
+          peso: '20%'
+        },
+        formula_weights: {
+          variacao_10d: 0.55,
+          preco: 0.25,
+          global_365d: 0.20
         },
         shadow_results_summary: {
           min_p_final: shadowResults.length > 0 ? Math.min(...shadowResults.map(r => r.p_final)) : null,
