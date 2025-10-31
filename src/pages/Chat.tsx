@@ -466,14 +466,16 @@ const Chat = () => {
       <MatrixRain />
       <div className="fixed inset-0 bg-gradient-to-br from-deep-navy via-background to-secondary/30" style={{ zIndex: 1 }} />
       
-      {/* Toggle Button */}
-      <Button
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="fixed top-4 left-4 z-30 glass-effect hover:bg-primary/20 border border-primary/30 transition-all duration-300"
-        size="icon"
-      >
-        {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </Button>
+      {/* Toggle Button (mobile only) */}
+      {isMobile && (
+        <Button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="fixed top-4 left-4 z-30 glass-effect hover:bg-primary/20 border border-primary/30 transition-all duration-300"
+          size="icon"
+        >
+          {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+      )}
 
       {/* Sidebar */}
       {isMobile ? (
