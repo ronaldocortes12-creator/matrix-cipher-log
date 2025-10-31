@@ -28,7 +28,7 @@ export const translations = {
     },
     chat: {
       welcomeNew: "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte.",
-      welcomeBack: "Seja bem-vindo de volta, é bom saber que está dedicado com seu progresso e evolução, vamos continuar de onde paramos?",
+      welcomeBack: "É bom te ver de volta, operadores lucrativos se fazem na consistência. Podemos seguir de onde paramos?",
       placeholder: "Digite sua mensagem...",
       completeDay: "Concluir Dia",
       saveError: "Erro ao salvar mensagem",
@@ -164,7 +164,7 @@ export const translations = {
     },
     chat: {
       welcomeNew: "Welcome! I'll be your teacher for the next few days and I'll make sure you learn everything and can operate and profit consistently in the fastest-growing market in the world.\n\nOur training will be here, and we'll start with the basics of crypto. Tell me if you already understand the basics - if you do, we can skip the first part.",
-      welcomeBack: "Welcome back, it's good to know you're dedicated to your progress and evolution, shall we continue where we left off?",
+      welcomeBack: "Good to see you back, profitable traders are built on consistency. Shall we continue from where we left off?",
       placeholder: "Type your message...",
       completeDay: "Complete Day",
       saveError: "Error saving message",
@@ -300,7 +300,7 @@ export const translations = {
     },
     chat: {
       welcomeNew: "¡Bienvenido! Seré tu profesor durante los próximos días y me aseguraré de que aprendas todo y puedas operar y obtener ganancias consistentes en el mercado de más rápido crecimiento del mundo.\n\nNuestro entrenamiento será aquí, y comenzaremos con los conceptos básicos de cripto. Dime si ya entiendes lo básico - si es así, podemos saltarnos la primera parte.",
-      welcomeBack: "Bienvenido de vuelta, es bueno saber que estás dedicado a tu progreso y evolución, ¿continuamos donde lo dejamos?",
+      welcomeBack: "Es bueno verte de vuelta, los operadores rentables se construyen con consistencia. ¿Continuamos desde donde lo dejamos?",
       placeholder: "Escribe tu mensaje...",
       completeDay: "Completar Día",
       saveError: "Error al guardar mensaje",
