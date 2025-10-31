@@ -154,9 +154,9 @@ const Index = () => {
       <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
       {/* Login Container */}
-      <div className="relative z-10 w-full max-w-md px-6 mx-4 py-0">
+      <div className="relative z-10 w-full max-w-md px-6 mx-4 py-0 -mt-8 sm:-mt-12">
         {/* Logo */}
-        <div className="flex justify-center -mb-4 sm:-mb-2 animate-float">
+        <div className="flex justify-center -mb-8 sm:-mb-6 animate-float">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
@@ -166,7 +166,7 @@ const Index = () => {
         </div>
 
         {/* Premium Login Card */}
-        <div className="glass-effect rounded-2xl p-3 sm:p-6 sm:pt-4 shadow-2xl border-glow relative overflow-hidden -mt-2">
+        <div className="glass-effect rounded-2xl p-3 sm:p-6 pt-2 sm:pt-3 shadow-2xl border-glow relative overflow-hidden -mt-6 sm:-mt-4">
           {/* Premium corner accents */}
           <div className="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 border-primary/30 rounded-tl-2xl"></div>
           <div className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary/30 rounded-tr-2xl"></div>
@@ -182,7 +182,7 @@ const Index = () => {
           </div>
 
           {/* Language Selector */}
-          <div className="flex justify-center gap-2 mb-4 relative z-10">
+          <div className="flex justify-center gap-2 mb-2 relative z-10">
             {[
               { code: 'pt' as Language, flag: '🇧🇷', name: 'PT' },
               { code: 'en' as Language, flag: '🇺🇸', name: 'EN' },
@@ -209,8 +209,8 @@ const Index = () => {
             ))}
           </div>
 
-          <div className="text-center mb-5 relative z-10">
-            <h1 className="text-4xl sm:text-5xl font-bold mb-3 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
+          <div className="text-center mb-3 relative z-10">
+            <h1 className="text-4xl sm:text-5xl font-bold mb-2 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
               {t('login.title')}
             </h1>
             <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-3"></div>
