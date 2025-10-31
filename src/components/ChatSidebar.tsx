@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { UserHeader } from "./UserHeader";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type Lesson = {
   id: string;
@@ -19,6 +20,7 @@ type ChatSidebarProps = {
 };
 
 export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson, onToggleSidebar }: ChatSidebarProps) => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   return (

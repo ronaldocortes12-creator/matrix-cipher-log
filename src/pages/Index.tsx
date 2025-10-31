@@ -55,24 +55,34 @@ const Index = () => {
       if (error) throw error;
 
       if (data.user) {
-        toast({
-          title: t('login.loginSuccess'),
+      toast({
+        title: "Login realizado!",
+        description: "Bem-vindo de volta.",
+      });
+      
+      // Enforce lesson states
+      try {
+        await supabase.functions.invoke('enforce-lesson-states', {
+          body: { userId: data.user.id }
         });
+      } catch (e) {
+        console.warn('Failed to enforce lesson states:', e);
+      }
 
-        // Executar enforcement para corrigir estados imediatamente
-        try {
-          console.log('[Login] Enforcing lesson states for user:', data.user.id);
-          await supabase.functions.invoke('enforce-lesson-states', {
-            body: { user_id: data.user.id }
-          });
-          console.log('[Login] Lesson states enforced successfully');
-        } catch (enforceError) {
-          console.error('[Login] Error enforcing lesson states:', enforceError);
-          // Continuar mesmo se falhar - o cron vai corrigir depois
-        }
+      // Verificar se usuário já tem idioma configurado
+      const { data: userPrefs } = await supabase
+        .from('user_preferences')
+        .select('language, has_seen_welcome')
+        .eq('user_id', data.user.id)
+        .maybeSingle();
 
-        // Sempre redirecionar para seleção de idioma após login
+      if (!userPrefs?.language) {
         window.location.href = "/language-selection";
+      } else if (userPrefs.has_seen_welcome) {
+        window.location.href = "/chat";
+      } else {
+        window.location.href = "/welcome/1";
+      }
       }
     } catch (error: any) {
       toast({

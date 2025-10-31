@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type Crypto = {
   name: string;
@@ -41,6 +42,7 @@ type Crypto = {
 };
 
 const Market = () => {
+  const { t } = useLanguage();
   const [cryptos, setCryptos] = useState<Crypto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -98,8 +100,8 @@ const Market = () => {
       if (probError) {
         console.error('[MARKET] Erro ao buscar probabilidades:', probError);
         toast({
-          title: "Erro ao carregar dados",
-          description: "Não foi possível carregar as probabilidades calculadas.",
+          title: t('market.errorTitle'),
+          description: t('market.errorDesc'),
           variant: "destructive",
         });
         setIsLoading(false);
@@ -263,8 +265,8 @@ const Market = () => {
     } catch (error) {
       console.error('[MARKET] ❌ Erro ao carregar dados:', error);
       toast({
-        title: "Erro ao carregar dados",
-        description: "Ocorreu um erro ao carregar os dados do mercado.",
+        title: t('market.errorTitle'),
+        description: t('market.errorDesc'),
         variant: "destructive",
       });
       setIsLoading(false);
@@ -278,14 +280,14 @@ const Market = () => {
       <div className="relative z-10">
         <div className="container mx-auto px-4 py-8 pb-24">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-primary">Market Analysis</h1>
-            <p className="text-3xl font-bold text-primary/80 mt-2">Cálculo matemático e estatístico secreto e confidencial - Atualizações diárias.</p>
+            <h1 className="text-3xl font-bold text-primary">{t('market.title')}</h1>
+            <p className="text-3xl font-bold text-primary/80 mt-2">{t('market.subtitle')}</p>
           </div>
 
           <Alert className="mb-8 border-primary/30 bg-primary/5">
             <AlertCircle className="h-5 w-5 text-primary" />
             <AlertDescription className="text-foreground/90 leading-relaxed">
-              <strong className="text-primary">IMPORTANTE:</strong> Não tome decisões de investimentos ANTES de concluir as aulas com o Jeff Wu, todos estes campos ficarão mais claros e alinhados ao que você irá aprender com ele. Conclua primeiro todas as aulas e com certeza você terá um melhor proveito destas análises. NÃO SEJA ANSIOSO, você está sendo forjado como um investidor profissional, confie no processo.
+              <strong className="text-primary">{t('market.warningTitle')}</strong> {t('market.warningText')}
             </AlertDescription>
           </Alert>
 

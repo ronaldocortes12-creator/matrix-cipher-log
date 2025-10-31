@@ -5,6 +5,7 @@ import { TabBar } from "@/components/TabBar";
 import { MatrixRain } from "@/components/MatrixRain";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Accordion,
   AccordionContent,
@@ -26,64 +27,68 @@ type Module = {
 };
 
 const Dashboard = () => {
-  const [modules, setModules] = useState<Module[]>([
+  const { t } = useLanguage();
+  
+  const getModules = (): Module[] => [
     {
       id: "1",
-      title: "MÓDULO 01: FUNDAMENTOS",
+      title: t('dashboard.module1'),
       color: "hsl(220, 90%, 60%)",
       lessons: [
-        { day: 1, title: "O Básico das Criptos", completed: false },
-        { day: 2, title: "Como o Dinheiro se Move", completed: false },
-        { day: 3, title: "Mercado Futuro Explicado", completed: false },
-        { day: 4, title: "Spot vs Futuro", completed: false },
-        { day: 5, title: "Seu Plano Financeiro", completed: false },
+        { day: 1, title: t('dashboard.day1'), completed: false },
+        { day: 2, title: t('dashboard.day2'), completed: false },
+        { day: 3, title: t('dashboard.day3'), completed: false },
+        { day: 4, title: t('dashboard.day4'), completed: false },
+        { day: 5, title: t('dashboard.day5'), completed: false },
       ],
     },
     {
       id: "2",
-      title: "MÓDULO 02: ANÁLISE",
+      title: t('dashboard.module2'),
       color: "hsl(270, 90%, 60%)",
       lessons: [
-        { day: 6, title: "A Matemática do Trader", completed: false },
-        { day: 7, title: "Dominando o Vector", completed: false },
-        { day: 8, title: "Os Indicadores que Importam", completed: false },
-        { day: 9, title: "Trabalhando com Ranges", completed: false },
-        { day: 10, title: "Gradiente Linear", completed: false },
+        { day: 6, title: t('dashboard.day6'), completed: false },
+        { day: 7, title: t('dashboard.day7'), completed: false },
+        { day: 8, title: t('dashboard.day8'), completed: false },
+        { day: 9, title: t('dashboard.day9'), completed: false },
+        { day: 10, title: t('dashboard.day10'), completed: false },
       ],
     },
     {
       id: "3",
-      title: "MÓDULO 03: PRÁTICA",
+      title: t('dashboard.module3'),
       color: "hsl(330, 90%, 60%)",
       lessons: [
-        { day: 11, title: "Nossa Estratégia", completed: false },
-        { day: 12, title: "Conhecendo a Bitget", completed: false },
-        { day: 13, title: "Vector na Prática", completed: false },
-        { day: 14, title: "Seu Maior Inimigo: Você Mesmo", completed: false },
-        { day: 15, title: "Simulando suas Primeiras Operações", completed: false },
+        { day: 11, title: t('dashboard.day11'), completed: false },
+        { day: 12, title: t('dashboard.day12'), completed: false },
+        { day: 13, title: t('dashboard.day13'), completed: false },
+        { day: 14, title: t('dashboard.day14'), completed: false },
+        { day: 15, title: t('dashboard.day15'), completed: false },
       ],
     },
     {
       id: "4",
-      title: "MÓDULO 04: INDO PRO REAL",
+      title: t('dashboard.module4'),
       color: "hsl(30, 95%, 60%)",
       lessons: [
-        { day: 16, title: "Hora da Verdade", completed: false },
-        { day: 17, title: "Colocando Dinheiro na Corretora", completed: false },
-        { day: 18, title: "Acompanhamento e Metas", completed: false },
-        { day: 19, title: "Consultoria Permanente", completed: false },
-        { day: 20, title: "Liberdade Financeira", completed: false },
+        { day: 16, title: t('dashboard.day16'), completed: false },
+        { day: 17, title: t('dashboard.day17'), completed: false },
+        { day: 18, title: t('dashboard.day18'), completed: false },
+        { day: 19, title: t('dashboard.day19'), completed: false },
+        { day: 20, title: t('dashboard.day20'), completed: false },
       ],
     },
     {
       id: "5",
-      title: "CONSULTORIA PREMIUM",
+      title: t('dashboard.module5'),
       color: "hsl(45, 95%, 60%)",
       lessons: [
-        { day: 21, title: "Consultoria de Operações com Jeff Wu", completed: false },
+        { day: 21, title: t('dashboard.day21'), completed: false },
       ],
     },
-  ]);
+  ];
+
+  const [modules, setModules] = useState<Module[]>(getModules());
 
   useEffect(() => {
     const loadProgress = async () => {
@@ -96,18 +101,17 @@ const Dashboard = () => {
         .eq('user_id', user.id);
 
       if (progressData) {
-        setModules(prevModules => 
-          prevModules.map(module => ({
-            ...module,
-            lessons: module.lessons.map(lesson => {
-              const progress = progressData.find(p => p.lesson_day === lesson.day);
-              return {
-                ...lesson,
-                completed: progress?.completed || false
-              };
-            })
-          }))
-        );
+        const updatedModules = getModules().map(module => ({
+          ...module,
+          lessons: module.lessons.map(lesson => {
+            const progress = progressData.find(p => p.lesson_day === lesson.day);
+            return {
+              ...lesson,
+              completed: progress?.completed || false
+            };
+          })
+        }));
+        setModules(updatedModules);
       }
     };
 
@@ -150,7 +154,7 @@ const Dashboard = () => {
       {/* Header */}
       <div className="relative z-10 bg-card/50 backdrop-blur-lg border-b border-primary/20 p-4">
         <h1 className="text-xl font-bold text-center bg-gradient-to-r from-primary to-foreground bg-clip-text text-transparent">
-          Dados e Evoluções
+          {t('dashboard.title')}
         </h1>
       </div>
 
@@ -161,13 +165,13 @@ const Dashboard = () => {
             <div className="text-5xl font-bold text-primary mb-2">
               {progressPercentage}%
             </div>
-            <p className="text-muted-foreground text-sm">Concluído</p>
+            <p className="text-muted-foreground text-sm">{t('dashboard.completed')}</p>
           </div>
           
           <Progress value={progressPercentage} className="h-3 mb-3" />
           
           <p className="text-center text-sm text-foreground/80">
-            {completedLessons} de {totalLessons} aulas concluídas
+            {completedLessons} de {totalLessons} {t('dashboard.lessonsCompleted')}
           </p>
         </div>
 
@@ -235,7 +239,7 @@ const Dashboard = () => {
                             "text-sm font-medium",
                             isSpecial && "text-yellow-500"
                           )}>
-                            Dia {lesson.day}
+                            {t('dashboard.dayLabel')} {lesson.day}
                           </span>
                           <span className={cn(
                             "text-xs",
@@ -250,7 +254,7 @@ const Dashboard = () => {
                   
                   {isSpecial && (
                     <div className="px-3 py-3 text-xs text-yellow-500/70 italic border-t border-yellow-500/20 mt-3 pt-3">
-                      Aqui, suas operações serão guiadas por nosso Especialista Estatístico em Cripto
+                      {t('dashboard.consultoriaDesc')}
                     </div>
                   )}
                 </AccordionContent>

@@ -1,15 +1,17 @@
 import { MessageSquare, TrendingUp, LineChart } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export const TabBar = () => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
 
   const tabs = [
-    { icon: MessageSquare, label: "Chat", path: "/chat" },
-    { icon: TrendingUp, label: "Evolução", path: "/dashboard" },
-    { icon: LineChart, label: "Criptos", path: "/market" },
+    { icon: MessageSquare, label: t('nav.chat'), path: "/chat" },
+    { icon: TrendingUp, label: t('nav.dashboard'), path: "/dashboard" },
+    { icon: LineChart, label: t('nav.market'), path: "/market" },
   ];
 
   return (

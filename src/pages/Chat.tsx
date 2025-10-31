@@ -11,6 +11,7 @@ import jeffAvatar from "@/assets/jeff-wu-avatar.png";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { LessonCompleteAnimation } from "@/components/LessonCompleteAnimation";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type Message = {
   id: number;
@@ -28,6 +29,7 @@ type Lesson = {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 const Chat = () => {
+  const { t, language } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
@@ -347,10 +349,10 @@ const Chat = () => {
       
       if (userIsNew) {
         // Mensagem para NOVO usuário
-        welcomeContent = "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte.";
+        welcomeContent = t('chat.welcomeNew');
       } else {
         // Mensagem para USUÁRIO RETORNANDO
-        welcomeContent = "Seja bem-vindo de volta, é bom saber que está dedicado com seu progresso e evolução, vamos continuar de onde paramos?";
+        welcomeContent = t('chat.welcomeBack');
       }
       
       const initialMessage: Message = {
