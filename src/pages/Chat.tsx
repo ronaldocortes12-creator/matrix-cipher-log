@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Menu, X, ChevronLeft } from "lucide-react";
+import { Send, Menu, X, ChevronLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabBar } from "@/components/TabBar";
@@ -40,6 +40,7 @@ const Chat = () => {
   const [completedLessonNumber, setCompletedLessonNumber] = useState(0);
   const [canCompleteLesson, setCanCompleteLesson] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -366,16 +367,22 @@ const Chat = () => {
   };
 
   const handleSelectLesson = async (lessonId: string) => {
+    setIsLoadingHistory(true);
     setActiveLessonId(lessonId);
     setMessages([]);
-    setCanCompleteLesson(false); // Reset ao trocar de aula
+    setInput("");
+    setCanCompleteLesson(false);
+    setIsInitialLoad(true);
+    
     if (userId) {
       await loadChatHistory(userId);
     }
+    
+    setIsLoadingHistory(false);
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isSending || !userId || !activeLessonId) return;
+    if (!input.trim() || isSending || isLoadingHistory || !userId || !activeLessonId) return;
 
     const userMessage: Message = {
       id: messages.length + 1,
@@ -716,36 +723,47 @@ const Chat = () => {
         {/* Messages */}
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                {message.role === "assistant" && (
-                  <div className="flex-shrink-0">
-                    <img src={jeffAvatar} alt="Jeff Wu" className="w-10 h-10 rounded-full ring-2 ring-primary/30" />
-                  </div>
-                )}
-                
-                <div
-                  className={`max-w-[70%] rounded-2xl p-4 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "glass-effect text-foreground"
-                  }`}
-                >
-                  <p 
-                    className="whitespace-pre-wrap text-sm leading-relaxed"
-                    dangerouslySetInnerHTML={{
-                      __html: message.content
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\*([^\*]+?)\*/g, '<strong>$1</strong>')
-                    }}
-                  />
-                </div>
+            {isLoadingHistory ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
+                <span className="text-sm text-muted-foreground">
+                  Carregando histórico...
+                </span>
               </div>
-            ))}
-            <div ref={messagesEndRef} />
+            ) : (
+              <>
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    {message.role === "assistant" && (
+                      <div className="flex-shrink-0">
+                        <img src={jeffAvatar} alt="Jeff Wu" className="w-10 h-10 rounded-full ring-2 ring-primary/30" />
+                      </div>
+                    )}
+                    
+                    <div
+                      className={`max-w-[70%] rounded-2xl p-4 ${
+                        message.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : "glass-effect text-foreground"
+                      }`}
+                    >
+                      <p 
+                        className="whitespace-pre-wrap text-sm leading-relaxed"
+                        dangerouslySetInnerHTML={{
+                          __html: message.content
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\*([^\*]+?)\*/g, '<strong>$1</strong>')
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </>
+            )}
           </div>
         </ScrollArea>
 
@@ -779,12 +797,12 @@ const Chat = () => {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
               placeholder="Digite sua mensagem..."
-              disabled={isSending || !activeLessonId}
+              disabled={isSending || isLoadingHistory || !activeLessonId}
               className="flex-1 bg-background/50"
             />
             <Button
               onClick={handleSend}
-              disabled={isSending || !input.trim() || !activeLessonId}
+              disabled={isSending || isLoadingHistory || !input.trim() || !activeLessonId}
               className="px-6"
             >
               <Send className="h-4 w-4" />
