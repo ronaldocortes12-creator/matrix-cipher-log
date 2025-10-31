@@ -645,6 +645,7 @@ const Chat = () => {
               handleSelectLesson(lessonId);
               setIsSidebarOpen(false);
             }}
+            onToggleSidebar={() => setIsSidebarOpen(false)}
           />
         </div>
       ) : (
