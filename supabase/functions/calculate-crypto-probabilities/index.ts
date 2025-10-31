@@ -27,6 +27,10 @@ const CRYPTOS = [
   { symbol: 'NEAR', coinId: 'near' },
   { symbol: 'FET', coinId: 'fetch-ai' },
   { symbol: 'SUI', coinId: 'sui' },
+  { symbol: 'WLD', coinId: 'worldcoin-wld' },
+  { symbol: 'XLM', coinId: 'stellar' },
+  { symbol: 'WIF', coinId: 'dogwifcoin' },
+  { symbol: 'ALGO', coinId: 'algorand' },
 ];
 
 // Constante epsilon para evitar divisão por zero
