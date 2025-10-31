@@ -39,6 +39,7 @@ const Chat = () => {
   const [showCelebration, setShowCelebration] = useState(false);
   const [completedLessonNumber, setCompletedLessonNumber] = useState(0);
   const [canCompleteLesson, setCanCompleteLesson] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -48,16 +49,43 @@ const Chat = () => {
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    if (messages.length > 0) {
+      if (isInitialLoad) {
+        scrollToBottomInstant();
+        setIsInitialLoad(false);
+      } else {
+        scrollToBottomSmooth();
+      }
+    }
   }, [messages]);
+
+  useEffect(() => {
+    if (activeLessonId) {
+      setIsInitialLoad(true);
+    }
+  }, [activeLessonId]);
 
   // Set initial sidebar state based on device size
   useEffect(() => {
     setIsSidebarOpen(!isMobile);
   }, [isMobile]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottomInstant = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: "instant",
+        block: "end" 
+      });
+    }, 100);
+  };
+
+  const scrollToBottomSmooth = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: "smooth",
+        block: "end" 
+      });
+    }, 50);
   };
 
   const handleCompleteDay = async () => {
@@ -315,6 +343,7 @@ const Chat = () => {
         role: msg.role as "user" | "assistant",
         content: msg.content
       })));
+      scrollToBottomInstant();
     } else {
       // Initial message
       const initialMessage: Message = {
@@ -323,6 +352,7 @@ const Chat = () => {
         content: "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte."
       };
       setMessages([initialMessage]);
+      scrollToBottomInstant();
       
       if (uid && activeLessonId) {
         await supabase.from('chat_messages').insert({
