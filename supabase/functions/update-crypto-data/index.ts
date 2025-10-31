@@ -20,7 +20,7 @@ const CRYPTOS = [
   { symbol: 'TON', coinId: 'the-open-network' },
   { symbol: 'LINK', coinId: 'chainlink' },
   { symbol: 'DOT', coinId: 'polkadot' },
-  { symbol: 'MATIC', coinId: 'matic-network' },
+  { symbol: 'POL', coinId: 'polygon-ecosystem-token' },
   { symbol: 'UNI', coinId: 'uniswap' },
   { symbol: 'LTC', coinId: 'litecoin' },
   { symbol: 'ICP', coinId: 'internet-computer' },
