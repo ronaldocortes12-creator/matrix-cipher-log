@@ -4,6 +4,8 @@ import { MatrixRain } from "@/components/MatrixRain";
 import { CryptoCard } from "@/components/CryptoCard";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 type Crypto = {
   name: string;
@@ -281,6 +283,13 @@ const Market = () => {
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold text-primary">Market Analysis</h1>
           </div>
+
+          <Alert className="mb-8 border-primary/30 bg-primary/5">
+            <AlertCircle className="h-5 w-5 text-primary" />
+            <AlertDescription className="text-foreground/90 leading-relaxed">
+              <strong className="text-primary">IMPORTANTE:</strong> Não tome decisões de investimentos ANTES de concluir as aulas com o Jeff Wu, todos estes campos ficarão mais claros e alinhados ao que você irá aprender com ele. Conclua primeiro todas as aulas e com certeza você terá um melhor proveito destas análises. NÃO SEJA ANSIOSO, você está sendo forjado como um investidor profissional, confie no processo.
+            </AlertDescription>
+          </Alert>
 
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
