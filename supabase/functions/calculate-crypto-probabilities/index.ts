@@ -630,6 +630,13 @@ Deno.serve(async (req) => {
           console.error(`        ❌ Zeros detectados: preço=${precoAtual}, min=${minPreco}, max=${maxPreco365}`);
           continue;
         }
+        
+        // Validação: ATH deve ser válido
+        if (athPrice <= 0) {
+          validationErrors.push(`${crypto.symbol}: ATH inválido (${athPrice})`);
+          console.error(`        ❌ ATH inválido: ${athPrice}`);
+          continue;
+        }
 
         // Validação: ATH deve ser >= máximo observado em 365d
         let finalAthPrice = athPrice;
@@ -788,7 +795,7 @@ Deno.serve(async (req) => {
           percentage: probabilityPercentage,
           precoAtual,
           minPreco,
-          maxPreco: maxPreco365,
+          maxPreco: finalAthPrice,
           ic95Low,
           ic95High,
           nDias: historicalPrices.length,
