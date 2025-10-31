@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          ip_address: unknown
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          ip_address: unknown
+          request_count?: number
+          window_start?: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          ip_address?: unknown
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -588,6 +615,33 @@ export type Database = {
         }
         Relationships: []
       }
+      system_health_checks: {
+        Row: {
+          check_type: string
+          created_at: string
+          details: Json | null
+          id: string
+          response_time_ms: number | null
+          status: string
+        }
+        Insert: {
+          check_type: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          response_time_ms?: number | null
+          status: string
+        }
+        Update: {
+          check_type?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          response_time_ms?: number | null
+          status?: string
+        }
+        Relationships: []
+      }
       user_interactions: {
         Row: {
           action_data: Json | null
@@ -759,6 +813,7 @@ export type Database = {
     }
     Functions: {
       backend_health_check: { Args: never; Returns: Json }
+      cleanup_old_crypto_data: { Args: never; Returns: undefined }
       create_user_session: {
         Args: {
           p_device_info?: Json
@@ -778,6 +833,7 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       soft_delete_user: { Args: { target_user_id: string }; Returns: boolean }
+      system_health_check: { Args: never; Returns: Json }
       update_session_activity: {
         Args: { p_session_token: string }
         Returns: boolean
