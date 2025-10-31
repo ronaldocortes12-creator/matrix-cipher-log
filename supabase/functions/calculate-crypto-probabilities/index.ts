@@ -107,29 +107,110 @@ async function fetchFallbackData(coinId: string, symbol: string) {
   }
 }
 
-// Função para buscar ATH (All-Time High) da CoinGecko
-async function fetchATH(coinId: string, symbol: string) {
-  try {
-    console.log(`  🏆 Buscando ATH real para ${symbol}...`);
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`
-    );
+// Função para buscar ATH com cache e retry logic
+async function fetchATHWithCache(supabase: any, coinId: string, symbol: string, retries = 3) {
+  // 1. Tentar buscar do cache primeiro
+  const { data: cachedATH } = await supabase
+    .from('crypto_ath_cache')
+    .select('ath_price, ath_date, last_updated')
+    .eq('symbol', symbol)
+    .single();
+
+  // Se cache existe e foi atualizado nos últimos 7 dias, usar
+  if (cachedATH && cachedATH.last_updated) {
+    const cacheAge = Date.now() - new Date(cachedATH.last_updated).getTime();
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
     
-    if (!response.ok) {
-      throw new Error(`CoinGecko API failed: ${response.status}`);
+    if (cacheAge < sevenDaysMs) {
+      console.log(`  ✓ ATH ${symbol} do cache: $${cachedATH.ath_price} em ${cachedATH.ath_date} (cache: ${Math.floor(cacheAge / (24 * 60 * 60 * 1000))}d)`);
+      return {
+        ath: parseFloat(cachedATH.ath_price),
+        athDate: cachedATH.ath_date
+      };
     }
-    
-    const data = await response.json();
-    const ath = data.market_data?.ath?.usd || 0;
-    const athDate = data.market_data?.ath_date?.usd || null;
-    
-    console.log(`  ✓ ATH ${symbol}: $${ath.toFixed(2)} em ${athDate}`);
-    
-    return { ath, athDate };
-  } catch (error) {
-    console.error(`  ❌ Falha ao buscar ATH para ${symbol}:`, error);
-    return { ath: 0, athDate: null };
   }
+
+  // 2. Se não tem cache ou está desatualizado, buscar da API com retry
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`  🏆 Buscando ATH real para ${symbol} (tentativa ${attempt}/${retries})...`);
+      
+      // Delay exponencial entre tentativas
+      if (attempt > 1) {
+        const delayMs = Math.pow(2, attempt - 1) * 1000; // 2s, 4s, 8s
+        console.log(`  ⏳ Aguardando ${delayMs/1000}s antes da tentativa...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+      
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`,
+        {
+          headers: {
+            'Accept': 'application/json'
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        if (response.status === 429 && attempt < retries) {
+          console.log(`  ⚠️ Rate limit (429), tentando novamente...`);
+          continue;
+        }
+        throw new Error(`CoinGecko API failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const ath = data.market_data?.ath?.usd || 0;
+      const athDate = data.market_data?.ath_date?.usd || null;
+      
+      if (ath > 0 && athDate) {
+        console.log(`  ✓ ATH ${symbol}: $${ath.toFixed(2)} em ${athDate}`);
+        
+        // Salvar no cache
+        await supabase
+          .from('crypto_ath_cache')
+          .upsert({
+            symbol,
+            coin_id: coinId,
+            ath_price: ath,
+            ath_date: athDate.split('T')[0],
+            last_updated: new Date().toISOString()
+          }, {
+            onConflict: 'symbol'
+          });
+        
+        return { ath, athDate: athDate.split('T')[0] };
+      }
+      
+      throw new Error('ATH data incomplete');
+      
+    } catch (error) {
+      if (attempt === retries) {
+        console.error(`  ❌ Todas as tentativas falharam para ATH de ${symbol}:`, error);
+        
+        // 3. FALLBACK: Usar máximo histórico do banco como último recurso
+        const { data: maxPrice } = await supabase
+          .from('crypto_historical_prices')
+          .select('date, closing_price')
+          .eq('symbol', symbol)
+          .order('closing_price', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (maxPrice && parseFloat(maxPrice.closing_price) > 0) {
+          console.log(`  🔄 FALLBACK: Usando máximo do banco: $${maxPrice.closing_price} em ${maxPrice.date}`);
+          return {
+            ath: parseFloat(maxPrice.closing_price) * 1.1, // 10% acima para ser conservador
+            athDate: maxPrice.date
+          };
+        }
+        
+        return { ath: 0, athDate: null };
+      }
+    }
+  }
+  
+  return { ath: 0, athDate: null };
 }
 
 Deno.serve(async (req) => {
@@ -310,9 +391,9 @@ Deno.serve(async (req) => {
 
         console.log(`  ✓ ${historicalPrices.length} dias de histórico de preços`);
 
-        // ========== BUSCAR ATH (ALL-TIME HIGH) DA COINGECKO ==========
+        // ========== BUSCAR ATH COM CACHE E RETRY ==========
         
-        const { ath: athPrice, athDate } = await fetchATH(crypto.coinId, crypto.symbol);
+        const { ath: athPrice, athDate } = await fetchATHWithCache(supabase, crypto.coinId, crypto.symbol);
         
         // Validar ATH
         if (athPrice <= 0 || !athDate) {
@@ -560,6 +641,7 @@ Deno.serve(async (req) => {
             sigma_cripto: sigmaCripto,
             ic_95_low: ic95Low,
             ic_95_high: ic95High,
+            ath_cached_at: new Date().toISOString(),
             validation_status: 'approved'
           }, {
             onConflict: 'symbol,calculation_date'

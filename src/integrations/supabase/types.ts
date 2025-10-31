@@ -91,6 +91,36 @@ export type Database = {
           },
         ]
       }
+      crypto_ath_cache: {
+        Row: {
+          ath_date: string
+          ath_price: number
+          coin_id: string
+          created_at: string
+          id: string
+          last_updated: string
+          symbol: string
+        }
+        Insert: {
+          ath_date: string
+          ath_price: number
+          coin_id: string
+          created_at?: string
+          id?: string
+          last_updated?: string
+          symbol: string
+        }
+        Update: {
+          ath_date?: string
+          ath_price?: number
+          coin_id?: string
+          created_at?: string
+          id?: string
+          last_updated?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       crypto_data_collection_status: {
         Row: {
           coin_id: string
@@ -198,6 +228,7 @@ export type Database = {
       }
       crypto_probabilities: {
         Row: {
+          ath_cached_at: string | null
           ath_date: string | null
           calculation_date: string
           coin_id: string
@@ -219,6 +250,7 @@ export type Database = {
           validation_status: string | null
         }
         Insert: {
+          ath_cached_at?: string | null
           ath_date?: string | null
           calculation_date?: string
           coin_id: string
@@ -240,6 +272,7 @@ export type Database = {
           validation_status?: string | null
         }
         Update: {
+          ath_cached_at?: string | null
           ath_date?: string | null
           calculation_date?: string
           coin_id?: string
