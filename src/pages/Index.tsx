@@ -156,7 +156,7 @@ const Index = () => {
       {/* Login Container */}
       <div className="relative z-10 w-full max-w-md px-6 mx-4 py-0 -mt-8 sm:-mt-12">
         {/* Logo */}
-        <div className="flex justify-center -mb-8 sm:-mb-6 animate-float">
+        <div className="flex justify-center -mb-10 sm:-mb-8 animate-float">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
@@ -166,7 +166,7 @@ const Index = () => {
         </div>
 
         {/* Premium Login Card */}
-        <div className="glass-effect rounded-2xl p-3 sm:p-6 pt-2 sm:pt-3 shadow-2xl border-glow relative overflow-hidden -mt-6 sm:-mt-4">
+        <div className="glass-effect rounded-2xl p-3 sm:p-6 pt-2 sm:pt-3 shadow-2xl border-glow relative overflow-hidden -mt-8 sm:-mt-6">
           {/* Premium corner accents */}
           <div className="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 border-primary/30 rounded-tl-2xl"></div>
           <div className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary/30 rounded-tr-2xl"></div>
