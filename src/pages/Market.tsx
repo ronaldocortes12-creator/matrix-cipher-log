@@ -81,6 +81,7 @@ const Market = () => {
         { id: 'worldcoin-wld', symbol: 'WLD', name: 'Worldcoin', logo: 'https://assets.coingecko.com/coins/images/31069/small/worldcoin.jpeg' },
         { id: 'stellar', symbol: 'XLM', name: 'Stellar', logo: 'https://assets.coingecko.com/coins/images/100/small/Stellar_symbol_black_RGB.png' },
         { id: 'dogwifcoin', symbol: 'WIF', name: 'dogwifhat', logo: 'https://assets.coingecko.com/coins/images/33566/small/dogwifhat.jpg' },
+        { id: 'algorand', symbol: 'ALGO', name: 'Algorand', logo: 'https://assets.coingecko.com/coins/images/4380/small/download.png' },
       ];
 
       // Buscar probabilidades calculadas do banco (preferir últimas 24h)
