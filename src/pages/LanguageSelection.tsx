@@ -1,23 +1,62 @@
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { MatrixRain } from "@/components/MatrixRain";
 import logoMain from "@/assets/logo-main.png";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Language } from "@/i18n/translations";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
 
 const LanguageSelection = () => {
   const navigate = useNavigate();
-  const { setLanguage } = useLanguage();
+  const { setLanguage, t } = useLanguage();
+  const [currentLanguage, setCurrentLanguage] = useState<Language | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadUserLanguage = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: prefs } = await supabase
+          .from('user_preferences')
+          .select('language')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        setCurrentLanguage((prefs?.language as Language) || null);
+      }
+      setIsLoading(false);
+    };
+    
+    loadUserLanguage();
+  }, []);
 
   const handleLanguageSelect = async (lang: Language) => {
     try {
       await setLanguage(lang);
+      
       toast.success(
-        lang === 'pt' ? 'Idioma selecionado!' : 
-        lang === 'en' ? 'Language selected!' : 
-        '¡Idioma seleccionado!'
+        lang === 'pt' ? 'Idioma confirmado!' : 
+        lang === 'en' ? 'Language confirmed!' : 
+        '¡Idioma confirmado!'
       );
-      navigate("/welcome/1");
+      
+      // Verificar se já viu welcome pages
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: prefs } = await supabase
+          .from('user_preferences')
+          .select('has_seen_welcome')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (prefs?.has_seen_welcome) {
+          navigate("/chat");
+        } else {
+          navigate("/welcome/1");
+        }
+      }
     } catch (error) {
       console.error('Error selecting language:', error);
       toast.error(
@@ -27,6 +66,22 @@ const LanguageSelection = () => {
       );
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const title = currentLanguage 
+    ? "Confirm Your Language / Confirme seu Idioma / Confirma tu Idioma"
+    : "Choose Your Language / Escolha seu Idioma / Elige tu Idioma";
+  
+  const subtitle = currentLanguage
+    ? "Your language preference / Sua preferência de idioma / Tu preferencia de idioma"
+    : "Select the course language / Selecione o idioma do curso / Selecciona el idioma del curso";
 
   const languages = [
     { code: 'pt' as Language, name: 'Português', flag: '🇧🇷', nativeName: 'Portuguese' },
@@ -56,10 +111,10 @@ const LanguageSelection = () => {
               className="w-32 h-32 mx-auto mb-6 opacity-90"
             />
             <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary via-primary-glow to-primary bg-clip-text text-transparent">
-              Choose Your Language
+              {title}
             </h1>
             <p className="text-muted-foreground text-lg">
-              Select the course language / Selecione o idioma do curso / Selecciona el idioma del curso
+              {subtitle}
             </p>
           </div>
 
@@ -69,11 +124,24 @@ const LanguageSelection = () => {
               <div
                 key={lang.code}
                 onClick={() => handleLanguageSelect(lang.code)}
-                className="group relative cursor-pointer"
+                className={`group relative cursor-pointer ${
+                  currentLanguage === lang.code ? 'ring-2 ring-primary/60' : ''
+                }`}
                 style={{ animationDelay: `${index * 100}ms` }}
               >
                 {/* Glass card */}
                 <div className="relative overflow-hidden rounded-2xl bg-card/30 backdrop-blur-xl border border-primary/20 p-8 hover:bg-card/40 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20">
+                  {/* Current language badge */}
+                  {currentLanguage === lang.code && (
+                    <div className="absolute top-3 right-3 z-20">
+                      <div className="bg-primary/20 border border-primary/50 rounded-full px-3 py-1 backdrop-blur-sm">
+                        <span className="text-xs text-primary font-medium">
+                          {lang.code === 'pt' ? 'Atual' : lang.code === 'en' ? 'Current' : 'Actual'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Animated border gradient */}
                   <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                        style={{
@@ -111,6 +179,20 @@ const LanguageSelection = () => {
               </div>
             ))}
           </div>
+
+          {/* Skip button if language already set */}
+          {currentLanguage && (
+            <div className="text-center mt-8 animate-fade-in">
+              <button 
+                onClick={() => handleLanguageSelect(currentLanguage)}
+                className="text-muted-foreground hover:text-primary transition-colors duration-300 text-sm font-medium group"
+              >
+                {currentLanguage === 'pt' ? 'Continuar com idioma atual →' :
+                 currentLanguage === 'en' ? 'Continue with current language →' :
+                 'Continuar con idioma actual →'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

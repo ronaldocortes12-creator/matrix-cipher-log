@@ -65,11 +65,15 @@ export const translations = {
     // Language Selection
     languageSelection: {
       title: "Escolha seu Idioma",
+      titleConfirm: "Confirme seu Idioma",
       subtitle: "Selecione o idioma do curso",
+      subtitleConfirm: "Sua preferência de idioma",
       portuguese: "Português",
       english: "English",
       spanish: "Español",
       selectLanguage: "Selecionar Idioma",
+      continueWithCurrent: "Continuar com idioma atual →",
+      currentBadge: "Atual",
     },
     // Chat
     chat: {
@@ -219,11 +223,15 @@ export const translations = {
     // Language Selection
     languageSelection: {
       title: "Choose Your Language",
+      titleConfirm: "Confirm Your Language",
       subtitle: "Select the course language",
+      subtitleConfirm: "Your language preference",
       portuguese: "Português",
       english: "English",
       spanish: "Español",
       selectLanguage: "Select Language",
+      continueWithCurrent: "Continue with current language →",
+      currentBadge: "Current",
     },
     // Chat
     chat: {
@@ -373,11 +381,15 @@ export const translations = {
     // Language Selection
     languageSelection: {
       title: "Elige tu Idioma",
+      titleConfirm: "Confirma tu Idioma",
       subtitle: "Selecciona el idioma del curso",
+      subtitleConfirm: "Tu preferencia de idioma",
       portuguese: "Português",
       english: "English",
       spanish: "Español",
       selectLanguage: "Seleccionar Idioma",
+      continueWithCurrent: "Continuar con idioma actual →",
+      currentBadge: "Actual",
     },
     // Chat
     chat: {

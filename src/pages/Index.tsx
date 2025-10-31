@@ -55,22 +55,12 @@ const Index = () => {
       if (error) throw error;
 
       if (data.user) {
-        // Verificar se já viu as welcome pages
-        const { data: preferences } = await supabase
-          .from('user_preferences')
-          .select('has_seen_welcome')
-          .eq('user_id', data.user.id)
-          .maybeSingle();
-
         toast({
           title: t('login.loginSuccess'),
         });
 
-        if (preferences?.has_seen_welcome) {
-          window.location.href = "/chat";
-        } else {
-          window.location.href = "/welcome/1";
-        }
+        // Sempre redirecionar para seleção de idioma após login
+        window.location.href = "/language-selection";
       }
     } catch (error: any) {
       toast({
@@ -99,8 +89,8 @@ const Index = () => {
         description: t('login.signupDescription'),
       });
 
-      // Redireciona para o onboarding inicial
-      window.location.href = "/welcome/1";
+      // Redirecionar para seleção de idioma após signup
+      window.location.href = "/language-selection";
     } catch (error: any) {
       toast({
         title: t('login.signupError'),
