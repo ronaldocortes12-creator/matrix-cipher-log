@@ -37,18 +37,32 @@ const CRYPTOS = [
 const EPSILON = 1e-10;
 
 // Tolerâncias para validação
-const TOLERANCE_MU = 1e-6;
-const TOLERANCE_SIGMA = 1e-6;
 const TOLERANCE_PROB = 0.001; // 0.1 p.p.
-const MIN_DISPERSION_PP = 1.0; // dispersão mínima entre criptos (em pontos percentuais) - ajustado para 1pp para permitir mais flexibilidade
+const MIN_DISPERSION_PP = 1.0; // dispersão mínima entre criptos (em pontos percentuais)
 
-// Interface para armazenar cálculos em sombra
+/**
+ * FÓRMULA FINAL:
+ * 
+ * P(alta) = 0.55 × P_mcap + 0.25 × P_btc + 0.20 × P_price
+ * 
+ * Onde:
+ * - P_mcap = w10 × p10 + w40 × p40 (com w10=0.35, w40=0.20)
+ * - p10 e p40 são calculados com INVERSÃO: saída de dinheiro → alta, entrada forte → queda
+ * - Reforços por ΔUSD absoluto:
+ *   - 10 dias: threshold 100B USD, γ10 = 0.8, normalização por 200B
+ *   - 40 dias: threshold 200B USD, γ40 = 0.6, normalização por 400B
+ * - P_btc: z-score do BTC 10 dias, slope=1.6, clamp [0.10, 0.90]
+ * - P_price: z-score do log-preço atual, usando preço LIVE do CoinGecko, slope=1.2, clamp [0.05, 0.95]
+ */
+
 interface ShadowCalc {
   symbol: string;
   mu: number;
   sigma: number;
   p_alta_preco: number;
   p_alta_total_mcap_10d: number;
+  p_alta_total_mcap_40d: number;
+  p_mcap_combined: number;
   p_alta_btc: number;
   p_final: number;
   direction: 'alta' | 'queda';
@@ -217,6 +231,39 @@ async function fetchATHWithCache(supabase: any, coinId: string, symbol: string, 
   return { ath: 0, athDate: null };
 }
 
+// Função para buscar preços atuais (live) em batch do CoinGecko
+async function fetchLivePricesBatch(coinIds: string[]): Promise<Map<string, number>> {
+  const pricesMap = new Map<string, number>();
+  
+  try {
+    const idsParam = coinIds.join(',');
+    console.log(`\n🔄 Buscando preços ao vivo para ${coinIds.length} criptos...`);
+    
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${idsParam}&vs_currencies=usd`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`CoinGecko API failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    for (const coinId of coinIds) {
+      if (data[coinId]?.usd) {
+        pricesMap.set(coinId, data[coinId].usd);
+      }
+    }
+    
+    console.log(`  ✓ ${pricesMap.size}/${coinIds.length} preços ao vivo obtidos`);
+    
+  } catch (error) {
+    console.error(`  ❌ Erro ao buscar preços ao vivo:`, error);
+  }
+  
+  return pricesMap;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -236,10 +283,10 @@ Deno.serve(async (req) => {
     const shadowResults: ShadowCalc[] = [];
     const validationErrors: string[] = [];
 
-    // ========== PRÉ-CÁLCULO 1: COMPONENTE DE TOTAL CRYPTO MARKET CAP 10 DIAS (55%) ==========
-    // Componente baseado na tendência de 10 dias do Total Crypto Market Cap
+    // ========== PRÉ-CÁLCULO 1: COMPONENTE DE TOTAL CRYPTO MARKET CAP 10 DIAS (peso 0.35 dentro dos 55%) ==========
+    // INVERSÃO: Saída de dinheiro → ALTA, Entrada forte de dinheiro → QUEDA
     
-    console.log('\n🔄 Calculando componente de Total Crypto Market Cap 10 dias (55%)...');
+    console.log('\n💰 Calculando componente de Total Crypto Market Cap 10 dias (peso 0.35 dentro dos 55%)...');
     
     // Buscar últimos 11 dias do Total Market Cap global (para 10 retornos)
     const { data: globalMcap10d, error: mcap10dError } = await supabase
@@ -248,15 +295,21 @@ Deno.serve(async (req) => {
       .order('date', { ascending: false })
       .limit(11);
 
-    let pAltaTotalMcap10d = 0.5; // Default neutro se não houver dados
+    let p10 = 0.5; // Default neutro se não houver dados
     let mcap10dLogReturns: number[] = [];
-    let mcap10dZScore = 0;
+    let z10 = 0;
+    let delta10USD = 0;
+    let mcapInicial10d = 0;
+    let mcapFinal10d = 0;
 
     if (!mcap10dError && globalMcap10d && globalMcap10d.length >= 11) {
       console.log(`  ✓ ${globalMcap10d.length} dias de Total Market Cap disponíveis`);
       
       // Calcular retornos logarítmicos dos últimos 10 dias
       const sortedMcap = [...globalMcap10d].reverse(); // ordenar do mais antigo para o mais recente
+      mcapInicial10d = parseFloat(sortedMcap[0].total_market_cap as string);
+      mcapFinal10d = parseFloat(sortedMcap[sortedMcap.length - 1].total_market_cap as string);
+      delta10USD = mcapFinal10d - mcapInicial10d;
       
       for (let i = 1; i < sortedMcap.length; i++) {
         const mcapAnterior = parseFloat(sortedMcap[i - 1].total_market_cap as string);
@@ -269,31 +322,41 @@ Deno.serve(async (req) => {
       }
       
       if (mcap10dLogReturns.length >= 8) {
-        const muMcap10d = mean(mcap10dLogReturns);
-        const sigmaMcap10d = standardDeviation(mcap10dLogReturns);
+        const mu10 = mean(mcap10dLogReturns);
+        const sigma10 = standardDeviation(mcap10dLogReturns);
         
         // Calcular z-score: usar estatística t com correção por tamanho da amostra (√n)
         const n10 = mcap10dLogReturns.length;
-        mcap10dZScore = (muMcap10d / (sigmaMcap10d + EPSILON)) * Math.sqrt(n10);
+        z10 = (mu10 / (sigma10 + EPSILON)) * Math.sqrt(n10);
         
-        // Converter z-score em probabilidade (sigmoide) com calibração mais sensível
-        const SLOPE_10D = 1.8;
-        pAltaTotalMcap10d = 1 / (1 + Math.exp(-SLOPE_10D * mcap10dZScore));
-        // Forçar leve afastamento do 50% para evitar clustering
-        pAltaTotalMcap10d = Math.min(0.9, Math.max(0.1, pAltaTotalMcap10d));
+        // INVERSÃO: sigmoid(-SLOPE * z) → saída = z negativo → sigmoid positivo → alta
+        const S10 = 1.8;
+        p10 = 1 / (1 + Math.exp(-(-S10 * z10))); // Nota: -S10 * z10 para inverter
         
-        const mcapInicial = parseFloat(sortedMcap[0].total_market_cap as string);
-        const mcapFinal = parseFloat(sortedMcap[sortedMcap.length - 1].total_market_cap as string);
-        const variacao10d = ((mcapFinal - mcapInicial) / mcapInicial) * 100;
+        // Reforço por ΔUSD absoluto
+        const THRESHOLD_10D_USD = 100e9; // 100 bilhões
+        const GAMMA_10 = 0.8;
+        const NORM_10 = 200e9; // 200 bilhões
         
-        console.log(`  📊 Total Market Cap inicial (10d atrás): $${(mcapInicial / 1e12).toFixed(2)}T`);
-        console.log(`  📊 Total Market Cap final (hoje): $${(mcapFinal / 1e12).toFixed(2)}T`);
-        console.log(`  📊 Variação 10 dias: $${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
-        console.log(`  📈 n (10d) = ${mcap10dLogReturns.length}`);
-        console.log(`  📈 μ (10d) = ${muMcap10d.toFixed(6)}, σ (10d) = ${sigmaMcap10d.toFixed(6)}`);
-        console.log(`  📈 z-score (10d) = ${mcap10dZScore.toFixed(4)} (slope=${SLOPE_10D})`);
-        console.log(`  💎 P(alta|total_mcap_10d) = ${(pAltaTotalMcap10d * 100).toFixed(2)}%`);
-        console.log(`  ✅ Componente 10d (55%): MESMO para TODAS as criptos`);
+        if (Math.abs(delta10USD) >= THRESHOLD_10D_USD) {
+          const deltaLogit = (delta10USD / NORM_10) * GAMMA_10;
+          const logit10 = Math.log(p10 / (1 - p10 + EPSILON));
+          const logit10Reinforced = logit10 - deltaLogit; // -delta porque entrada → queda
+          p10 = 1 / (1 + Math.exp(-logit10Reinforced));
+          console.log(`  🔥 Reforço 10d aplicado: ΔUSD=${(delta10USD/1e9).toFixed(2)}B → shift=${deltaLogit.toFixed(4)}`);
+        }
+        
+        // Clamp final
+        p10 = Math.min(0.95, Math.max(0.05, p10));
+        
+        const variacao10d = (delta10USD / mcapInicial10d) * 100;
+        const flowType = delta10USD < 0 ? 'OUTFLOW (→ ALTA)' : 'INFLOW (→ QUEDA)';
+        
+        console.log(`  📊 Market Cap inicial (10d): $${(mcapInicial10d / 1e12).toFixed(2)}T`);
+        console.log(`  📊 Market Cap final (hoje): $${(mcapFinal10d / 1e12).toFixed(2)}T`);
+        console.log(`  📊 Δ10_USD = ${delta10USD >= 0 ? '+' : ''}$${(delta10USD / 1e9).toFixed(2)}B (${flowType})`);
+        console.log(`  📊 Δ10_% = ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
+        console.log(`  📈 z10 = ${z10.toFixed(4)}, p10 = ${(p10 * 100).toFixed(2)}% (invertido)`);
       } else {
         console.log(`  ⚠️ Retornos insuficientes (${mcap10dLogReturns.length}/8), usando neutro (50%)`);
       }
@@ -301,8 +364,93 @@ Deno.serve(async (req) => {
       console.log(`  ⚠️ Dados de 10 dias insuficientes (${globalMcap10d?.length || 0}/11), usando neutro (50%)`);
     }
 
-    // ========== PRÉ-CÁLCULO 2: COMPONENTE MOVIMENTO DO BITCOIN (25%) ==========
-    // Componente baseado na tendência de 10 dias do preço do Bitcoin
+    // ========== PRÉ-CÁLCULO 2: COMPONENTE DE TOTAL CRYPTO MARKET CAP 40 DIAS (peso 0.20 dentro dos 55%) ==========
+    // INVERSÃO: Saída de dinheiro → ALTA, Entrada forte de dinheiro → QUEDA
+    
+    console.log('\n💰 Calculando componente de Total Crypto Market Cap 40 dias (peso 0.20 dentro dos 55%)...');
+    
+    // Buscar últimos 41 dias do Total Market Cap global (para 40 retornos)
+    const { data: globalMcap40d, error: mcap40dError } = await supabase
+      .from('global_crypto_market_cap')
+      .select('date, total_market_cap')
+      .order('date', { ascending: false })
+      .limit(41);
+
+    let p40 = 0.5; // Default neutro se não houver dados
+    let mcap40dLogReturns: number[] = [];
+    let z40 = 0;
+    let delta40USD = 0;
+    let mcapInicial40d = 0;
+    let mcapFinal40d = 0;
+
+    if (!mcap40dError && globalMcap40d && globalMcap40d.length >= 41) {
+      console.log(`  ✓ ${globalMcap40d.length} dias de Total Market Cap disponíveis`);
+      
+      const sortedMcap = [...globalMcap40d].reverse();
+      mcapInicial40d = parseFloat(sortedMcap[0].total_market_cap as string);
+      mcapFinal40d = parseFloat(sortedMcap[sortedMcap.length - 1].total_market_cap as string);
+      delta40USD = mcapFinal40d - mcapInicial40d;
+      
+      for (let i = 1; i < sortedMcap.length; i++) {
+        const mcapAnterior = parseFloat(sortedMcap[i - 1].total_market_cap as string);
+        const mcapAtual = parseFloat(sortedMcap[i].total_market_cap as string);
+        
+        if (mcapAnterior > 0 && mcapAtual > 0) {
+          const logReturn = Math.log(mcapAtual / mcapAnterior);
+          mcap40dLogReturns.push(logReturn);
+        }
+      }
+      
+      if (mcap40dLogReturns.length >= 30) {
+        const mu40 = mean(mcap40dLogReturns);
+        const sigma40 = standardDeviation(mcap40dLogReturns);
+        
+        const n40 = mcap40dLogReturns.length;
+        z40 = (mu40 / (sigma40 + EPSILON)) * Math.sqrt(n40);
+        
+        // INVERSÃO: sigmoid(-SLOPE * z)
+        const S40 = 1.4;
+        p40 = 1 / (1 + Math.exp(-(-S40 * z40))); // -S40 * z40 para inverter
+        
+        // Reforço por ΔUSD absoluto
+        const THRESHOLD_40D_USD = 200e9; // 200 bilhões
+        const GAMMA_40 = 0.6;
+        const NORM_40 = 400e9; // 400 bilhões
+        
+        if (Math.abs(delta40USD) >= THRESHOLD_40D_USD) {
+          const deltaLogit = (delta40USD / NORM_40) * GAMMA_40;
+          const logit40 = Math.log(p40 / (1 - p40 + EPSILON));
+          const logit40Reinforced = logit40 - deltaLogit;
+          p40 = 1 / (1 + Math.exp(-logit40Reinforced));
+          console.log(`  🔥 Reforço 40d aplicado: ΔUSD=${(delta40USD/1e9).toFixed(2)}B → shift=${deltaLogit.toFixed(4)}`);
+        }
+        
+        p40 = Math.min(0.95, Math.max(0.05, p40));
+        
+        const variacao40d = (delta40USD / mcapInicial40d) * 100;
+        const flowType = delta40USD < 0 ? 'OUTFLOW (→ ALTA)' : 'INFLOW (→ QUEDA)';
+        
+        console.log(`  📊 Market Cap inicial (40d): $${(mcapInicial40d / 1e12).toFixed(2)}T`);
+        console.log(`  📊 Market Cap final (hoje): $${(mcapFinal40d / 1e12).toFixed(2)}T`);
+        console.log(`  📊 Δ40_USD = ${delta40USD >= 0 ? '+' : ''}$${(delta40USD / 1e9).toFixed(2)}B (${flowType})`);
+        console.log(`  📊 Δ40_% = ${variacao40d >= 0 ? '+' : ''}${variacao40d.toFixed(2)}%`);
+        console.log(`  📈 z40 = ${z40.toFixed(4)}, p40 = ${(p40 * 100).toFixed(2)}% (invertido)`);
+      } else {
+        console.log(`  ⚠️ Retornos insuficientes (${mcap40dLogReturns.length}/30), usando neutro (50%)`);
+      }
+    } else {
+      console.log(`  ⚠️ Dados de 40 dias insuficientes (${globalMcap40d?.length || 0}/41), usando neutro (50%)`);
+    }
+
+    // ========== COMBINAR p10 e p40 em p_mcap (pesos: 0.35 e 0.20 dentro dos 55%) ==========
+    const w10 = 0.35;
+    const w40 = 0.20;
+    const pMcapCombined = (w10 * p10 + w40 * p40) / (w10 + w40); // Normalizar para 100%
+    const pMcapFinal = Math.min(0.95, Math.max(0.05, pMcapCombined));
+    
+    console.log(`\n🔗 Combinação Market Cap: p_mcap = ${w10} × ${(p10*100).toFixed(2)}% + ${w40} × ${(p40*100).toFixed(2)}% = ${(pMcapFinal*100).toFixed(2)}%`);
+
+    // ========== PRÉ-CÁLCULO 3: COMPONENTE MOVIMENTO DO BITCOIN (25%) ==========
     
     console.log('\n₿ Calculando componente de movimento do Bitcoin 10 dias (25%)...');
     
@@ -360,11 +508,15 @@ Deno.serve(async (req) => {
       console.log(`  ⚠️ Retornos BTC insuficientes (${btc10dLogReturns.length}/8), usando neutro (50%)`);
     }
 
+    // ========== BUSCAR PREÇOS AO VIVO EM BATCH ==========
+    const coinIds = CRYPTOS.map(c => c.coinId);
+    const livePricesMap = await fetchLivePricesBatch(coinIds);
+
     for (const crypto of CRYPTOS) {
       try {
         console.log(`\n📊 Calculando ${crypto.symbol}...`);
 
-        // ========== ETAPA 1: COMPONENTE DE PREÇO (25%) ==========
+        // ========== ETAPA 1: COMPONENTE DE PREÇO (20%) ==========
         
         // Buscar histórico de 365 dias de preços
         const { data: priceData, error: priceError } = await supabase
@@ -427,7 +579,15 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const precoAtual = prices[prices.length - 1];
+        // USAR PREÇO AO VIVO DO COINGECKO se disponível
+        let precoAtual = prices[prices.length - 1]; // fallback: último histórico
+        if (livePricesMap.has(crypto.coinId)) {
+          precoAtual = livePricesMap.get(crypto.coinId)!;
+          console.log(`  🔴 Usando preço AO VIVO (CoinGecko): $${precoAtual.toFixed(6)}`);
+        } else {
+          console.log(`  ⚠️ Preço ao vivo indisponível, usando último histórico: $${precoAtual.toFixed(6)}`);
+        }
+
         const minPreco = Math.min(...prices);
         const maxPreco365 = Math.max(...prices);
         
@@ -439,7 +599,6 @@ Deno.serve(async (req) => {
         }
 
         // Validação: ATH deve ser >= máximo observado em 365d
-        // Se ATH do cache é menor, usar o máximo observado + 5% de margem
         let finalAthPrice = athPrice;
         let finalAthDate = athDate;
         
@@ -489,23 +648,20 @@ Deno.serve(async (req) => {
         const muCripto = mean(logReturns);
         const sigmaCripto = standardDeviation(logReturns);
 
-        // 🔍 LOG OBRIGATÓRIO: μ e σ por cripto
         console.log(`  📊 CRIPTO ${crypto.symbol}:`);
         console.log(`     n_dias_precos = ${historicalPrices.length}`);
         console.log(`     μ_cripto = ${muCripto.toFixed(6)}`);
         console.log(`     σ_cripto = ${sigmaCripto.toFixed(6)}`);
 
-        // ========== NOVO COMPONENTE 20%: VOLATILIDADE + PREÇO ATUAL ==========
-        // Usar distribuição de log-preços (μ_log, σ_log) e posição do preço atual
+        // ========== COMPONENTE 20%: PREÇO/VOLATILIDADE (usando preço ao vivo) ==========
         const logPrices = prices.map(p => Math.log(p));
         const muLogPrice = mean(logPrices);
         const sigmaLogPrice = standardDeviation(logPrices);
         const zPrice = (Math.log(precoAtual) - muLogPrice) / (sigmaLogPrice + EPSILON);
-        // Sigmoide com leve sensibilidade; clamp para evitar 50% cluster
+        
         const SLOPE_PRICE = 1.2;
         const pAltaPreco = Math.min(0.95, Math.max(0.05, 1 / (1 + Math.exp(-SLOPE_PRICE * zPrice))));
 
-        // Calcular IC 95% em log-preço para logging
         const ic95Low = muLogPrice - 1.96 * sigmaLogPrice;
         const ic95High = muLogPrice + 1.96 * sigmaLogPrice;
 
@@ -513,26 +669,17 @@ Deno.serve(async (req) => {
         console.log(`     z_preço = ${zPrice.toFixed(6)} (slope=${SLOPE_PRICE})`);
         console.log(`     P(alta|preço_vol) = ${(pAltaPreco * 100).toFixed(2)}%`);
 
-        // ========== ETAPA 2: COMPONENTE BTC 10d (25%) ==========
-        // Usar o componente de BTC 10d calculado (MESMO para todas as criptos)
+        // ========== COMPONENTES GLOBAIS ==========
         const pAltaBTC = pAltaBTC10d;
+        const pAltaMcap = pMcapFinal;
         
         console.log(`     P(alta|BTC_10d) = ${(pAltaBTC * 100).toFixed(2)}% [GLOBAL - BTC 10 DIAS]`);
+        console.log(`     P(alta|mcap) = ${(pAltaMcap * 100).toFixed(2)}% [GLOBAL - MCAP 10d+40d]`);
 
-        // ========== ETAPA 3: COMPONENTE DE TOTAL CRYPTO MARKET CAP 10 DIAS (55%) ==========
-        // Usar o componente de Total Market Cap 10d calculado (MESMO para todas as criptos)
-        const pAltaMcap10d = pAltaTotalMcap10d;
-        
-        console.log(`     P(alta|total_mcap_10d) = ${(pAltaMcap10d * 100).toFixed(2)}% [GLOBAL - 10 DIAS]`);
-        console.log(`        └─ z-score 10d: ${mcap10dZScore.toFixed(4)}`);
-
-        // ========== ETAPA 4: COMBINAÇÃO FINAL (55% total_mcap_10d + 25% BTC + 20% preço) ==========
-        // P_alta_final = 0.55 × P_alta_total_mcap_10d + 0.25 × P_alta_BTC_10d + 0.20 × P_alta_preço
-        const pAltaFinal = (0.55 * pAltaMcap10d) + (0.25 * pAltaBTC) + (0.20 * pAltaPreco);
+        // ========== COMBINAÇÃO FINAL (55% mcap + 25% BTC + 20% preço) ==========
+        const pAltaFinal = (0.55 * pAltaMcap) + (0.25 * pAltaBTC) + (0.20 * pAltaPreco);
         const pQuedaFinal = 1 - pAltaFinal;
 
-        // ========== ETAPA 5: DEFINIÇÃO DO TEXTO E PERCENTUAL ==========
-        
         let direction: 'alta' | 'queda';
         let probabilityPercentage: number;
 
@@ -544,20 +691,16 @@ Deno.serve(async (req) => {
           probabilityPercentage = pQuedaFinal * 100;
         }
 
-        // ========== VALIDAÇÃO EM SOMBRA: RECALCULAR E COMPARAR ==========
-        
+        // ========== VALIDAÇÃO EM SOMBRA ==========
         console.log(`     🔍 VALIDAÇÃO EM SOMBRA:`);
         
-        // Recalcular em sombra usando MESMA lógica do cálculo principal
         const logPricesSombra = prices.map(p => Math.log(p));
         const muLogPriceSombra = mean(logPricesSombra);
         const sigmaLogPriceSombra = standardDeviation(logPricesSombra);
         const zPriceSombra = (Math.log(precoAtual) - muLogPriceSombra) / (sigmaLogPriceSombra + EPSILON);
-        const SLOPE_PRICE_SOMBRA = 1.2;
-        const pAltaPrecoSombra = Math.min(0.95, Math.max(0.05, 1 / (1 + Math.exp(-SLOPE_PRICE_SOMBRA * zPriceSombra))));
-        const pAltaFinalSombra = (0.55 * pAltaMcap10d) + (0.25 * pAltaBTC) + (0.20 * pAltaPrecoSombra);
+        const pAltaPrecoSombra = Math.min(0.95, Math.max(0.05, 1 / (1 + Math.exp(-SLOPE_PRICE * zPriceSombra))));
+        const pAltaFinalSombra = (0.55 * pAltaMcap) + (0.25 * pAltaBTC) + (0.20 * pAltaPrecoSombra);
         
-        // Comparar com tolerâncias (apenas P_preço e P_final; não validamos μ/σ porque mudamos a abordagem)
         const diffPAltaPreco = Math.abs(pAltaPreco - pAltaPrecoSombra);
         const diffPFinal = Math.abs(pAltaFinal - pAltaFinalSombra);
         
@@ -581,10 +724,8 @@ Deno.serve(async (req) => {
         console.log(`        ✅ P_final diff: ${diffPFinal.toFixed(6)} ≤ ${TOLERANCE_PROB}`);
 
         // ========== VALIDAÇÕES LÓGICAS ==========
-        
         console.log(`     🧪 VALIDAÇÕES LÓGICAS:`);
         
-        // Validação 1: P_final em [0, 1]
         if (pAltaFinal < 0 || pAltaFinal > 1) {
           validationErrors.push(`${crypto.symbol}: P_final fora de [0,1]: ${pAltaFinal}`);
           console.error(`        ❌ SANITY: P_final=${pAltaFinal} fora de [0,1]`);
@@ -605,7 +746,9 @@ Deno.serve(async (req) => {
           mu: muCripto,
           sigma: sigmaCripto,
           p_alta_preco: pAltaPreco,
-          p_alta_total_mcap_10d: pAltaMcap10d,
+          p_alta_total_mcap_10d: p10,
+          p_alta_total_mcap_40d: p40,
+          p_mcap_combined: pMcapFinal,
           p_alta_btc: pAltaBTC,
           p_final: pAltaFinal,
           direction,
@@ -620,8 +763,7 @@ Deno.serve(async (req) => {
           athDate: finalAthDate
         });
 
-        // ========== ETAPA 6: SALVAR NO BANCO ==========
-        
+        // ========== SALVAR NO BANCO ==========
         const { error: insertError } = await supabase
           .from('crypto_probabilities')
           .upsert({
@@ -631,7 +773,7 @@ Deno.serve(async (req) => {
             direction: direction,
             probability_percentage: parseFloat(probabilityPercentage.toFixed(1)),
             price_component: pAltaPreco,
-            market_cap_component: pAltaMcap10d,
+            market_cap_component: pAltaMcap,
             final_probability: pAltaFinal,
             current_price: precoAtual,
             min_365d: minPreco,
@@ -654,7 +796,6 @@ Deno.serve(async (req) => {
           console.log(`     ✅ ${crypto.symbol} salvo no banco\n`);
         }
 
-        // Pequeno delay entre processamentos
         await new Promise(resolve => setTimeout(resolve, 100));
 
       } catch (error) {
@@ -662,25 +803,23 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ========== VALIDAÇÕES CRUZADAS ENTRE CRIPTOS ==========
-    
+    // ========== VALIDAÇÕES CRUZADAS ==========
     console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
     console.log('║       🔍 VALIDAÇÕES CRUZADAS                             ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
     
     if (shadowResults.length >= 2) {
-      // Validação 1: Componentes globais devem ser idênticos
-      const totalMcap10dProbs = shadowResults.map(r => r.p_alta_total_mcap_10d);
+      const mcapProbs = shadowResults.map(r => r.p_mcap_combined);
       const btcProbs = shadowResults.map(r => r.p_alta_btc);
       
-      const allTotalMcap10dSame = totalMcap10dProbs.every(p => Math.abs(p - totalMcap10dProbs[0]) < 1e-9);
+      const allMcapSame = mcapProbs.every(p => Math.abs(p - mcapProbs[0]) < 1e-9);
       const allBtcSame = btcProbs.every(p => Math.abs(p - btcProbs[0]) < 1e-9);
       
-      if (!allTotalMcap10dSame) {
-        validationErrors.push(`P_alta_total_mcap_10d difere entre criptos: ${totalMcap10dProbs.map(p => p.toFixed(6)).join(', ')}`);
-        console.error(`   ❌ P_alta_total_mcap_10d não é idêntico para todas`);
+      if (!allMcapSame) {
+        validationErrors.push(`P_mcap difere entre criptos: ${mcapProbs.map(p => p.toFixed(6)).join(', ')}`);
+        console.error(`   ❌ P_mcap não é idêntico para todas`);
       } else {
-        console.log(`   ✅ P_alta_total_mcap_10d idêntico: ${totalMcap10dProbs[0].toFixed(6)}`);
+        console.log(`   ✅ P_mcap idêntico: ${mcapProbs[0].toFixed(6)}`);
       }
       
       if (!allBtcSame) {
@@ -690,7 +829,6 @@ Deno.serve(async (req) => {
         console.log(`   ✅ P_alta_btc_10d idêntico: ${btcProbs[0].toFixed(6)}`);
       }
       
-      // Validação 2: Dispersão mínima
       const pFinals = shadowResults.map(r => r.p_final);
       const minPFinal = Math.min(...pFinals);
       const maxPFinal = Math.max(...pFinals);
@@ -703,7 +841,6 @@ Deno.serve(async (req) => {
         console.log(`   ✅ Dispersão adequada: ${dispersionPP.toFixed(2)}pp ≥ ${MIN_DISPERSION_PP}pp`);
       }
       
-      // Validação 3: μ e σ diferentes entre criptos
       const muValues = shadowResults.map(r => r.mu);
       const sigmaValues = shadowResults.map(r => r.sigma);
       
@@ -711,7 +848,7 @@ Deno.serve(async (req) => {
         for (let j = i + 1; j < shadowResults.length; j++) {
           if (Math.abs(muValues[i] - muValues[j]) < 1e-9 && 
               Math.abs(sigmaValues[i] - sigmaValues[j]) < 1e-9) {
-            validationErrors.push(`${shadowResults[i].symbol} e ${shadowResults[j].symbol} têm μ e σ idênticos (cache cruzado?)`);
+            validationErrors.push(`${shadowResults[i].symbol} e ${shadowResults[j].symbol} têm μ e σ idênticos`);
             console.error(`   ❌ ${shadowResults[i].symbol} e ${shadowResults[j].symbol}: μ,σ idênticos`);
           }
         }
@@ -719,7 +856,6 @@ Deno.serve(async (req) => {
       
       console.log(`   ✅ Cada cripto tem μ,σ únicos`);
       
-      // Validação 4: Consistência UI (texto, seta, percentual)
       let uiErrors = 0;
       for (const result of shadowResults) {
         const expectedDirection = result.p_final >= 0.5 ? 'alta' : 'queda';
@@ -745,8 +881,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ========== SMOKE TEST PÓS-PUBLICAÇÃO ==========
-    
+    // ========== SMOKE TEST ==========
     let allValidationsPassed = validationErrors.length === 0;
     
     console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
@@ -758,7 +893,6 @@ Deno.serve(async (req) => {
       const smokeTestErrors: string[] = [];
       
       for (const result of shadowResults) {
-        // Verificar se algum valor crítico está zerado
         if (result.precoAtual <= 0) {
           smokeTestErrors.push(`${result.symbol}: Preço atual = $0`);
           smokeTestFailed = true;
@@ -772,13 +906,11 @@ Deno.serve(async (req) => {
           smokeTestFailed = true;
         }
         
-        // Verificar coerência: ATH >= máximo 365d
         if (result.athPrice < result.maxPreco) {
           smokeTestErrors.push(`${result.symbol}: ATH ($${result.athPrice}) < Máx 365d ($${result.maxPreco})`);
           smokeTestFailed = true;
         }
         
-        // Verificar coerência: direção vs percentual
         const expectedDir = result.p_final >= 0.5 ? 'alta' : 'queda';
         if (result.direction !== expectedDir) {
           smokeTestErrors.push(`${result.symbol}: Direction=${result.direction} mas P_final=${result.p_final}`);
@@ -791,7 +923,6 @@ Deno.serve(async (req) => {
         smokeTestErrors.forEach((err, idx) => {
           console.error(`      ${idx + 1}. ${err}`);
         });
-        console.error(`   ⚠️ REVERTENDO PUBLICAÇÃO - Dados inconsistentes`);
         
         allValidationsPassed = false;
         validationErrors.push(...smokeTestErrors);
@@ -805,123 +936,97 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ========== RELATÓRIO FINAL DE VALIDAÇÃO ==========
-    
+    // ========== RELATÓRIO FINAL ==========
     console.log('\n\n╔═══════════════════════════════════════════════════════════╗');
     console.log('║       📋 AUDITORIA DO CÁLCULO DIÁRIO                     ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
     console.log(`⏰ Timestamp: ${new Date(calculationDate).toISOString()}`);
-    console.log(`\n💰 COMPONENTE TOTAL CRYPTO MARKET CAP 10 DIAS (55% - IGUAL PARA TODAS):`);
-    console.log(`   ┌─ Dados de entrada:`);
-    console.log(`   │  μ (10d) = ${mcap10dLogReturns.length > 0 ? mean(mcap10dLogReturns).toFixed(6) : 'N/A'}`);
-    console.log(`   │  σ (10d) = ${mcap10dLogReturns.length > 0 ? standardDeviation(mcap10dLogReturns).toFixed(6) : 'N/A'}`);
-    console.log(`   │  z-score (10d) = ${mcap10dZScore.toFixed(4)}`);
-    console.log(`   └─ Resultado:`);
-    console.log(`      P(alta|total_mcap_10d) = ${(pAltaTotalMcap10d * 100).toFixed(2)}%`);
-    console.log(`      P(queda|total_mcap_10d) = ${((1 - pAltaTotalMcap10d) * 100).toFixed(2)}%`);
-    console.log(`\n₿ COMPONENTE BTC 10 DIAS (25% - IGUAL PARA TODAS):`);
-    console.log(`   ┌─ Dados de entrada:`);
-    console.log(`   │  z_btc_10d = ${btc10dZScore.toFixed(6)}`);
-    console.log(`   │  n_btc_10d = ${typeof btc10dLogReturns !== 'undefined' ? btc10dLogReturns.length : '10'}`);
-    console.log(`   └─ Resultado:`);
-    console.log(`      P(alta|BTC_10d) = ${(pAltaBTC10d * 100).toFixed(2)}%`);
-    console.log(`      P(queda|BTC_10d) = ${((1 - pAltaBTC10d) * 100).toFixed(2)}%`);
+    
+    console.log(`\n💰 COMPONENTE MARKET CAP (55% TOTAL = 0.35×10d + 0.20×40d):`);
+    console.log(`   ┌─ 10 dias (peso 0.35):`);
+    console.log(`   │  Δ10_USD = ${delta10USD >= 0 ? '+' : ''}$${(delta10USD / 1e9).toFixed(2)}B`);
+    console.log(`   │  z10 = ${z10.toFixed(4)}, p10 = ${(p10 * 100).toFixed(2)}% (INVERTIDO)`);
+    console.log(`   ┌─ 40 dias (peso 0.20):`);
+    console.log(`   │  Δ40_USD = ${delta40USD >= 0 ? '+' : ''}$${(delta40USD / 1e9).toFixed(2)}B`);
+    console.log(`   │  z40 = ${z40.toFixed(4)}, p40 = ${(p40 * 100).toFixed(2)}% (INVERTIDO)`);
+    console.log(`   └─ Combinado: p_mcap = ${(pMcapFinal * 100).toFixed(2)}%`);
+    
+    console.log(`\n₿ COMPONENTE BTC 10 DIAS (25%):`);
+    console.log(`   z_btc = ${btc10dZScore.toFixed(4)}`);
+    console.log(`   P(alta|BTC) = ${(pAltaBTC10d * 100).toFixed(2)}%`);
+    
     console.log(`\n📊 RESUMO DA EXECUÇÃO:`);
     console.log(`   • ${successCount} criptos calculadas com sucesso`);
     console.log(`   • ${fallbackCount} criptos usaram fallback (CoinGecko)`);
     console.log(`   • ${CRYPTOS.length - successCount} criptos falharam`);
+    
     console.log(`\n📊 DETALHAMENTO POR CRIPTO (${shadowResults.length}):`);
     shadowResults.forEach((r, idx) => {
       console.log(`   ${idx + 1}. ${r.symbol}:`);
       console.log(`      • Preço atual: $${r.precoAtual.toFixed(6)}`);
-      console.log(`      • Mín 365d: $${r.minPreco.toFixed(6)}`);
-      console.log(`      • Máx 365d: $${r.maxPreco.toFixed(6)}`);
       console.log(`      • ATH: $${r.athPrice.toFixed(6)} (${r.athDate})`);
-      console.log(`      • μ: ${r.mu.toFixed(6)}, σ: ${r.sigma.toFixed(6)}`);
       console.log(`      • P(alta|preço) [20%]: ${(r.p_alta_preco * 100).toFixed(2)}%`);
-      console.log(`      • P(alta|total_mcap_10d) [55%]: ${(r.p_alta_total_mcap_10d * 100).toFixed(2)}%`);
-      console.log(`      • P(alta|BTC_10d) [25%]: ${(r.p_alta_btc * 100).toFixed(2)}%`);
+      console.log(`      • P(alta|mcap) [55%]: ${(r.p_mcap_combined * 100).toFixed(2)}%`);
+      console.log(`      • P(alta|BTC) [25%]: ${(r.p_alta_btc * 100).toFixed(2)}%`);
       console.log(`      • P_final: ${(r.p_final * 100).toFixed(2)}%`);
       console.log(`      • Direção: ${r.direction.toUpperCase()} (${r.percentage.toFixed(1)}%)`);
     });
     
-    console.log(`\n✅ VALIDAÇÃO (Critérios de Aceite):`);
-    console.log(`   [${pAltaTotalMcap10d !== 0.5 ? '✓' : '✗'}] Componente 55% usa Total Market Cap 10 dias`);
+    console.log(`\n✅ VALIDAÇÃO:`);
+    console.log(`   [${pMcapFinal !== 0.5 ? '✓' : '✗'}] Componente 55% usa Market Cap 10d+40d invertido`);
     console.log(`   [${pAltaBTC10d !== 0.5 ? '✓' : '✗'}] Componente 25% usa BTC 10 dias`);
     console.log(`   [${successCount > 0 ? '✓' : '✗'}] Pelo menos 1 cripto foi calculada`);
-    console.log(`   [${shadowResults.length > 0 ? '✓' : '✗'}] Validações em sombra passaram`);
     console.log(`   [${allValidationsPassed ? '✓' : '✗'}] Todas as checagens lógicas OK`);
-    console.log(`   [${validationErrors.length === 0 ? '✓' : '✗'}] Sem erros de validação`);
     
     if (!allValidationsPassed) {
-      console.log(`\n🚨 ERROS DE VALIDAÇÃO DETECTADOS (${validationErrors.length}):`);
+      console.log(`\n🚨 ERROS DE VALIDAÇÃO (${validationErrors.length}):`);
       validationErrors.forEach((err, idx) => {
         console.log(`   ${idx + 1}. ${err}`);
       });
-      console.log(`\n⚠️ PUBLICAÇÃO BLOQUEADA - Corrija os erros e execute novamente`);
     }
     
     console.log('╚═══════════════════════════════════════════════════════════╝\n');
 
     if (!allValidationsPassed) {
-      console.log(`❌ Validações falharam - dados NÃO publicados`);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'Validações falharam - dados não publicados',
+          message: 'Validações falharam',
           validation_errors: validationErrors,
           cryptos_calculated: successCount,
-          cryptos_validated: shadowResults.length,
-          calculation_date: calculationDate,
         }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    console.log(`✅ Todas validações passaram - Cálculo completo e publicado!`);
+    console.log(`✅ Cálculo completo e publicado!`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Probabilidades calculadas, validadas e publicadas com sucesso',
+        message: 'Probabilidades calculadas com sucesso (inversão aplicada)',
         cryptos_calculated: successCount,
         cryptos_validated: shadowResults.length,
         cryptos_with_fallback: fallbackCount,
-        validation_errors: validationErrors,
         all_validations_passed: allValidationsPassed,
         calculation_date: calculationDate,
-        total_mcap_10d_component: {
-          p_alta_total_mcap_10d: pAltaTotalMcap10d,
-          z_score_10d: mcap10dZScore,
-          mu_10d: mcap10dLogReturns.length > 0 ? mean(mcap10dLogReturns) : 0,
-          sigma_10d: mcap10dLogReturns.length > 0 ? standardDeviation(mcap10dLogReturns) : 0,
-          peso: '55%'
+        mcap_component: {
+          p10_inverted: p10,
+          p40_inverted: p40,
+          p_mcap_final: pMcapFinal,
+          delta10_usd_billions: delta10USD / 1e9,
+          delta40_usd_billions: delta40USD / 1e9,
+          peso: '55% (0.35×10d + 0.20×40d)'
         },
-        btc_10d_component: {
+        btc_component: {
           p_alta_btc_10d: pAltaBTC10d,
           z_btc_10d: btc10dZScore,
           peso: '25%'
         },
-        formula_weights: {
-          total_mcap_10d: 0.55,
-          btc_10d: 0.25,
-          preco_vol: 0.20
-        },
-        shadow_results_summary: {
-          min_p_final: shadowResults.length > 0 ? Math.min(...shadowResults.map(r => r.p_final)) : null,
-          max_p_final: shadowResults.length > 0 ? Math.max(...shadowResults.map(r => r.p_final)) : null,
-          dispersion_pp: shadowResults.length > 0 
-            ? (Math.max(...shadowResults.map(r => r.p_final)) - Math.min(...shadowResults.map(r => r.p_final))) * 100
-            : null,
-        }
+        formula: 'P(alta) = 0.55×p_mcap + 0.25×p_btc + 0.20×p_price',
+        inversion_note: 'Saída de dinheiro → ALTA, Entrada forte → QUEDA'
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
   } catch (error) {
@@ -931,10 +1036,7 @@ Deno.serve(async (req) => {
         success: false, 
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
