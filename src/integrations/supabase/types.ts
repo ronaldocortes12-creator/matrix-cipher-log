@@ -749,6 +749,7 @@ export type Database = {
           created_at: string | null
           has_seen_welcome: boolean | null
           id: string
+          language: string | null
           updated_at: string | null
           user_id: string
         }
@@ -756,6 +757,7 @@ export type Database = {
           created_at?: string | null
           has_seen_welcome?: boolean | null
           id?: string
+          language?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -763,6 +765,7 @@ export type Database = {
           created_at?: string | null
           has_seen_welcome?: boolean | null
           id?: string
+          language?: string | null
           updated_at?: string | null
           user_id?: string
         }
