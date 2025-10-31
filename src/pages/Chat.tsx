@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Menu, X } from "lucide-react";
+import { Send, Menu, X, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabBar } from "@/components/TabBar";
@@ -498,6 +498,7 @@ const Chat = () => {
               lessons={lessons}
               activeLessonId={activeLessonId}
               onSelectLesson={handleSelectLesson}
+              onToggleSidebar={() => setIsSidebarOpen(false)}
             />
           </div>
         )
@@ -509,6 +510,17 @@ const Chat = () => {
           className="fixed inset-0 bg-black/50 z-10"
           onClick={() => setIsSidebarOpen(false)}
         />
+      )}
+
+      {/* Expandir Sidebar Button (quando recolhido) */}
+      {!isMobile && !isSidebarOpen && (
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className="fixed left-4 top-4 z-30 p-2 rounded-lg bg-primary/20 hover:bg-primary/30 border border-primary/40 backdrop-blur-xl transition-all duration-300 group shadow-lg"
+          title="Expandir sidebar"
+        >
+          <ChevronLeft className="h-5 w-5 text-primary rotate-180 group-hover:translate-x-1 transition-transform" />
+        </button>
       )}
 
       {/* Chat Area */}

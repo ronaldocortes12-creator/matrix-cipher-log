@@ -1,4 +1,4 @@
-import { BookOpen, Plus, TrendingUp, Lock } from "lucide-react";
+import { BookOpen, Plus, TrendingUp, Lock, ChevronLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { UserHeader } from "./UserHeader";
 import { cn } from "@/lib/utils";
@@ -15,15 +15,30 @@ type ChatSidebarProps = {
   lessons: Lesson[];
   activeLessonId: string | null;
   onSelectLesson: (lessonId: string) => void;
+  onToggleSidebar?: () => void;
 };
 
-export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson }: ChatSidebarProps) => {
+export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson, onToggleSidebar }: ChatSidebarProps) => {
   const navigate = useNavigate();
 
   return (
     <div className="w-80 h-full overflow-hidden bg-card/50 backdrop-blur-xl border-r border-primary/20 flex flex-col">
       {/* User Header */}
       <UserHeader />
+
+      {/* Toggle Button */}
+      {onToggleSidebar && (
+        <div className="px-4 py-2 border-b border-primary/10">
+          <button
+            onClick={onToggleSidebar}
+            className="w-full p-2 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all duration-300 flex items-center justify-center gap-2 group"
+            title="Recolher sidebar"
+          >
+            <ChevronLeft className="h-4 w-4 text-primary group-hover:translate-x-[-2px] transition-transform" />
+            <span className="text-xs font-medium text-primary">Recolher</span>
+          </button>
+        </div>
+      )}
 
       {/* Lessons List */}
       <ScrollArea className="flex-1">
