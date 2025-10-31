@@ -25,7 +25,7 @@ const CRYPTOS = [
   { symbol: 'LTC', coinId: 'litecoin' },
   { symbol: 'ICP', coinId: 'internet-computer' },
   { symbol: 'NEAR', coinId: 'near' },
-  { symbol: 'FET', coinId: 'fetch-ai' },
+  { symbol: 'FET', coinId: 'artificial-superintelligence-alliance' },
   { symbol: 'SUI', coinId: 'sui' },
   { symbol: 'WLD', coinId: 'worldcoin-wld' },
   { symbol: 'XLM', coinId: 'stellar' },
@@ -162,11 +162,19 @@ Deno.serve(async (req) => {
 
         console.log(`  ✓ Recebidos ${prices.length} registros`);
 
-        // Inserir preços
-        const pricesBatch = prices.map(([timestamp, price]: [number, number]) => ({
+        // Deduplificar preços por data (mantém último do dia)
+        const pricesMap = new Map();
+        prices.forEach(([timestamp, price]: [number, number]) => {
+          const date = new Date(timestamp).toISOString().split('T')[0];
+          if (!pricesMap.has(date) || timestamp > pricesMap.get(date).timestamp) {
+            pricesMap.set(date, { timestamp, price });
+          }
+        });
+
+        const pricesBatch = Array.from(pricesMap.entries()).map(([date, { price }]) => ({
           symbol: status.symbol,
           coin_id: status.coinId,
-          date: new Date(timestamp).toISOString().split('T')[0],
+          date,
           closing_price: price,
         }));
 
@@ -180,18 +188,26 @@ Deno.serve(async (req) => {
           console.log(`  ✓ ${pricesBatch.length} preços inseridos`);
         }
 
-        // Inserir market caps
-        const mcapBatch = marketCaps.map(([timestamp, marketCap]: [number, number], index: number) => {
+        // Deduplificar market caps por data
+        const mcapMap = new Map();
+        marketCaps.forEach(([timestamp, marketCap]: [number, number]) => {
+          const date = new Date(timestamp).toISOString().split('T')[0];
+          if (!mcapMap.has(date) || timestamp > mcapMap.get(date).timestamp) {
+            mcapMap.set(date, { timestamp, marketCap });
+          }
+        });
+
+        const mcapBatch = Array.from(mcapMap.entries()).map(([date, { marketCap }], index, arr) => {
           let mcapChange = null;
           if (index > 0) {
-            const previousMcap = marketCaps[index - 1][1];
+            const previousMcap = arr[index - 1][1].marketCap;
             mcapChange = marketCap - previousMcap;
           }
 
           return {
             symbol: status.symbol,
             coin_id: status.coinId,
-            date: new Date(timestamp).toISOString().split('T')[0],
+            date,
             market_cap: marketCap,
             market_cap_change: mcapChange,
           };
