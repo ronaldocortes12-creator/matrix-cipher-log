@@ -412,6 +412,36 @@ const Chat = () => {
               .update({ status: 'completed' })
               .eq('id', activeLessonId);
 
+            console.log('✅ Aula marcada como concluída no lessons');
+
+            // NOVO: Atualizar tabela lesson_progress para sincronização com Dashboard
+            const { error: progressError } = await supabase
+              .from('lesson_progress')
+              .upsert({
+                user_id: userId,
+                lesson_day: currentLesson.lesson_number,
+                completed: true,
+                completed_at: new Date().toISOString()
+              }, {
+                onConflict: 'user_id,lesson_day'
+              });
+
+            if (progressError) {
+              console.error('❌ Erro ao atualizar progresso:', progressError);
+              // Log para monitoramento
+              await supabase.from('audit_logs').insert({
+                action: 'lesson_completion_error',
+                table_name: 'lesson_progress',
+                user_id: userId,
+                metadata: {
+                  lesson_number: currentLesson.lesson_number,
+                  error: progressError.message
+                }
+              });
+            } else {
+              console.log('✅ Progresso atualizado no Dashboard (lesson_progress)');
+            }
+
             const nextLessonNumber = currentLesson.lesson_number + 1;
             
             // Mostrar animação de celebração
