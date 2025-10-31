@@ -523,7 +523,9 @@ const Chat = () => {
                   <p 
                     className="whitespace-pre-wrap text-sm leading-relaxed"
                     dangerouslySetInnerHTML={{
-                      __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      __html: message.content
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*([^\*]+?)\*/g, '<strong>$1</strong>')
                     }}
                   />
                 </div>
