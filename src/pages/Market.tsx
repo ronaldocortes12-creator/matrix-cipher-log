@@ -84,11 +84,11 @@ const Market = () => {
         { id: 'algorand', symbol: 'ALGO', name: 'Algorand', logo: 'https://assets.coingecko.com/coins/images/4380/small/download.png' },
       ];
 
-      // Buscar probabilidades calculadas do banco (preferir últimas 24h)
+      // Buscar probabilidades calculadas do banco (preferir últimas 48h para maior chance de dados)
       let { data: probabilities, error: probError } = await supabase
         .from('crypto_probabilities')
         .select('*')
-        .gte('calculation_date', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .gte('calculation_date', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
         .order('calculation_date', { ascending: false });
 
       if (probError) {
@@ -102,31 +102,16 @@ const Market = () => {
         return;
       }
 
-      // Se não houver dados suficientes, disparar cálculo agora e refazer a consulta com polling
+      // Se não houver dados suficientes, disparar cálculo apenas uma vez (sem polling)
       const needCount = cryptoList.length;
       let symCount = new Set((probabilities || []).map((p: any) => p.symbol)).size;
-      if (symCount < needCount) {
-        console.log(`[MARKET] ⚠️ Só ${symCount}/${needCount} com dados. Disparando cálculo agora + polling...`);
-        toast({ title: 'Atualizando dados', description: 'Calculando probabilidades...', duration: 3000 });
+      if (symCount < needCount * 0.5) { // Se tiver menos de 50% dos dados
+        console.log(`[MARKET] ⚠️ Só ${symCount}/${needCount} com dados. Disparando cálculo único...`);
         try {
-          await supabase.functions.invoke('calculate-crypto-probabilities', { body: {} });
-          // Poll até completar ou timeout (30s)
-          const start = Date.now();
-          while (Date.now() - start < 30000) {
-            const refetch = await supabase
-              .from('crypto_probabilities')
-              .select('*')
-              .gte('calculation_date', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-              .order('calculation_date', { ascending: false });
-            if (!refetch.error) {
-              probabilities = refetch.data || [];
-              symCount = new Set((probabilities || []).map((p: any) => p.symbol)).size;
-              if (symCount >= needCount) break;
-            }
-            await new Promise((r) => setTimeout(r, 2000));
-          }
+          // Dispara o cálculo mas não espera
+          supabase.functions.invoke('calculate-crypto-probabilities', { body: {} }).catch(() => {});
         } catch (e) {
-          console.warn('[MARKET] Falha ao disparar cálculo imediato', e);
+          console.warn('[MARKET] Falha ao disparar cálculo', e);
         }
       }
 
