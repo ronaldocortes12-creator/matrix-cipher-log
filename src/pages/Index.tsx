@@ -154,19 +154,19 @@ const Index = () => {
       <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
       {/* Login Container */}
-      <div className="relative z-10 w-full max-w-md px-6 mx-4 pt-2">
+      <div className="relative z-10 w-full max-w-md px-6 mx-4 py-4 sm:py-8">
         {/* Logo */}
-        <div className="flex justify-center mb-8 animate-float">
+        <div className="flex justify-center mb-3 sm:mb-4 animate-float">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
-            className="w-80 h-auto object-contain drop-shadow-[0_0_50px_rgba(77,208,225,0.6)] filter brightness-125 contrast-125"
+            className="w-48 sm:w-64 h-auto object-contain drop-shadow-[0_0_50px_rgba(77,208,225,0.6)] filter brightness-125 contrast-125"
             style={{ filter: 'drop-shadow(0 0 50px rgba(77,208,225,0.6)) brightness(1.25) contrast(1.25)' }}
           />
         </div>
 
         {/* Premium Login Card */}
-        <div className="glass-effect rounded-2xl p-8 pt-6 shadow-2xl border-glow relative overflow-hidden">
+        <div className="glass-effect rounded-2xl p-4 sm:p-8 sm:pt-6 shadow-2xl border-glow relative overflow-hidden">
           {/* Premium corner accents */}
           <div className="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 border-primary/30 rounded-tl-2xl"></div>
           <div className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary/30 rounded-tr-2xl"></div>
@@ -210,7 +210,7 @@ const Index = () => {
           </div>
 
           <div className="text-center mb-6 relative z-10">
-            <h1 className="text-5xl font-bold mb-3 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
+            <h1 className="text-4xl sm:text-5xl font-bold mb-3 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
               {t('login.title')}
             </h1>
             <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-3"></div>
