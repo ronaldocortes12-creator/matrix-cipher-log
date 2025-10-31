@@ -48,7 +48,7 @@ interface ShadowCalc {
   mu: number;
   sigma: number;
   p_alta_preco: number;
-  p_alta_total_mcap_30d: number;
+  p_alta_total_mcap_10d: number;
   p_alta_global365d: number;
   p_final: number;
   direction: 'alta' | 'queda';
@@ -236,27 +236,27 @@ Deno.serve(async (req) => {
     const shadowResults: ShadowCalc[] = [];
     const validationErrors: string[] = [];
 
-    // ========== PRÉ-CÁLCULO 1: COMPONENTE DE TOTAL CRYPTO MARKET CAP 30 DIAS (55%) ==========
-    // Componente baseado na tendência de 30 dias do Total Crypto Market Cap
+    // ========== PRÉ-CÁLCULO 1: COMPONENTE DE TOTAL CRYPTO MARKET CAP 10 DIAS (55%) ==========
+    // Componente baseado na tendência de 10 dias do Total Crypto Market Cap
     
-    console.log('\n🔄 Calculando componente de Total Crypto Market Cap 30 dias (55%)...');
+    console.log('\n🔄 Calculando componente de Total Crypto Market Cap 10 dias (55%)...');
     
-    // Buscar últimos 30 dias do Total Market Cap global
-    const { data: globalMcap30d, error: mcap30dError } = await supabase
+    // Buscar últimos 11 dias do Total Market Cap global (para 10 retornos)
+    const { data: globalMcap10d, error: mcap10dError } = await supabase
       .from('global_crypto_market_cap')
       .select('date, total_market_cap')
       .order('date', { ascending: false })
-      .limit(30);
+      .limit(11);
 
-    let pAltaTotalMcap30d = 0.5; // Default neutro se não houver dados
-    let mcap30dLogReturns: number[] = [];
-    let mcap30dZScore = 0;
+    let pAltaTotalMcap10d = 0.5; // Default neutro se não houver dados
+    let mcap10dLogReturns: number[] = [];
+    let mcap10dZScore = 0;
 
-    if (!mcap30dError && globalMcap30d && globalMcap30d.length >= 30) {
-      console.log(`  ✓ ${globalMcap30d.length} dias de Total Market Cap disponíveis`);
+    if (!mcap10dError && globalMcap10d && globalMcap10d.length >= 11) {
+      console.log(`  ✓ ${globalMcap10d.length} dias de Total Market Cap disponíveis`);
       
-      // Calcular retornos logarítmicos dos últimos 30 dias
-      const sortedMcap = [...globalMcap30d].reverse(); // ordenar do mais antigo para o mais recente
+      // Calcular retornos logarítmicos dos últimos 10 dias
+      const sortedMcap = [...globalMcap10d].reverse(); // ordenar do mais antigo para o mais recente
       
       for (let i = 1; i < sortedMcap.length; i++) {
         const mcapAnterior = parseFloat(sortedMcap[i - 1].total_market_cap as string);
@@ -264,37 +264,37 @@ Deno.serve(async (req) => {
         
         if (mcapAnterior > 0 && mcapAtual > 0) {
           const logReturn = Math.log(mcapAtual / mcapAnterior);
-          mcap30dLogReturns.push(logReturn);
+          mcap10dLogReturns.push(logReturn);
         }
       }
       
-      if (mcap30dLogReturns.length >= 20) {
-        const muMcap30d = mean(mcap30dLogReturns);
-        const sigmaMcap30d = standardDeviation(mcap30dLogReturns);
+      if (mcap10dLogReturns.length >= 8) {
+        const muMcap10d = mean(mcap10dLogReturns);
+        const sigmaMcap10d = standardDeviation(mcap10dLogReturns);
         
         // Calcular z-score: (μ - 0) / σ
-        mcap30dZScore = muMcap30d / (sigmaMcap30d + EPSILON);
+        mcap10dZScore = muMcap10d / (sigmaMcap10d + EPSILON);
         
-        // Converter z-score em probabilidade usando função logística (sigmoide)
-        // P(alta) = 1 / (1 + e^(-z))
-        pAltaTotalMcap30d = 1 / (1 + Math.exp(-mcap30dZScore));
+        // Converter z-score em probabilidade usando função logística (sigmoide) com maior sensibilidade
+        const SLOPE_10D = 3.0;
+        pAltaTotalMcap10d = 1 / (1 + Math.exp(-SLOPE_10D * mcap10dZScore));
         
         const mcapInicial = parseFloat(sortedMcap[0].total_market_cap as string);
         const mcapFinal = parseFloat(sortedMcap[sortedMcap.length - 1].total_market_cap as string);
-        const variacao30d = ((mcapFinal - mcapInicial) / mcapInicial) * 100;
+        const variacao10d = ((mcapFinal - mcapInicial) / mcapInicial) * 100;
         
-        console.log(`  📊 Total Market Cap inicial (30d atrás): $${(mcapInicial / 1e12).toFixed(2)}T`);
+        console.log(`  📊 Total Market Cap inicial (10d atrás): $${(mcapInicial / 1e12).toFixed(2)}T`);
         console.log(`  📊 Total Market Cap final (hoje): $${(mcapFinal / 1e12).toFixed(2)}T`);
-        console.log(`  📊 Variação 30 dias: ${variacao30d >= 0 ? '+' : ''}${variacao30d.toFixed(2)}%`);
-        console.log(`  📈 μ (30d) = ${muMcap30d.toFixed(6)}, σ (30d) = ${sigmaMcap30d.toFixed(6)}`);
-        console.log(`  📈 z-score = ${mcap30dZScore.toFixed(4)}`);
-        console.log(`  💎 P(alta|total_mcap_30d) = ${(pAltaTotalMcap30d * 100).toFixed(2)}%`);
-        console.log(`  ✅ Componente 30d (55%): MESMO para TODAS as criptos`);
+        console.log(`  📊 Variação 10 dias: ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
+        console.log(`  📈 μ (10d) = ${muMcap10d.toFixed(6)}, σ (10d) = ${sigmaMcap10d.toFixed(6)}`);
+        console.log(`  📈 z-score (10d) = ${mcap10dZScore.toFixed(4)}`);
+        console.log(`  💎 P(alta|total_mcap_10d) = ${(pAltaTotalMcap10d * 100).toFixed(2)}%`);
+        console.log(`  ✅ Componente 10d (55%): MESMO para TODAS as criptos`);
       } else {
-        console.log(`  ⚠️ Retornos insuficientes (${mcap30dLogReturns.length}/20), usando neutro (50%)`);
+        console.log(`  ⚠️ Retornos insuficientes (${mcap10dLogReturns.length}/8), usando neutro (50%)`);
       }
     } else {
-      console.log(`  ⚠️ Dados de 30 dias insuficientes (${globalMcap30d?.length || 0}/30), usando neutro (50%)`);
+      console.log(`  ⚠️ Dados de 10 dias insuficientes (${globalMcap10d?.length || 0}/11), usando neutro (50%)`);
     }
 
     // ========== PRÉ-CÁLCULO 2: COMPONENTE GLOBAL DE MARKET CAP 365d (20%) ==========
@@ -515,16 +515,16 @@ Deno.serve(async (req) => {
         
         console.log(`     P(alta|global_mcap_365d) = ${(pAltaMcap365d * 100).toFixed(2)}% [GLOBAL]`);
 
-        // ========== ETAPA 3: COMPONENTE DE TOTAL CRYPTO MARKET CAP 30 DIAS (55%) ==========
-        // Usar o componente de Total Market Cap 30d calculado (MESMO para todas as criptos)
-        const pAltaMcap30d = pAltaTotalMcap30d;
+        // ========== ETAPA 3: COMPONENTE DE TOTAL CRYPTO MARKET CAP 10 DIAS (55%) ==========
+        // Usar o componente de Total Market Cap 10d calculado (MESMO para todas as criptos)
+        const pAltaMcap10d = pAltaTotalMcap10d;
         
-        console.log(`     P(alta|total_mcap_30d) = ${(pAltaMcap30d * 100).toFixed(2)}% [GLOBAL - 30 DIAS]`);
-        console.log(`        └─ z-score 30d: ${mcap30dZScore.toFixed(4)}`);
+        console.log(`     P(alta|total_mcap_10d) = ${(pAltaMcap10d * 100).toFixed(2)}% [GLOBAL - 10 DIAS]`);
+        console.log(`        └─ z-score 10d: ${mcap10dZScore.toFixed(4)}`);
 
-        // ========== ETAPA 4: COMBINAÇÃO FINAL (55% total_mcap_30d + 25% preço + 20% global365d) ==========
-        // P_alta_final = 0.55 × P_alta_total_mcap_30d + 0.25 × P_alta_preço + 0.20 × P_alta_global365d
-        const pAltaFinal = (0.55 * pAltaMcap30d) + (0.25 * pAltaPreco) + (0.20 * pAltaMcap365d);
+        // ========== ETAPA 4: COMBINAÇÃO FINAL (55% total_mcap_10d + 25% preço + 20% global365d) ==========
+        // P_alta_final = 0.55 × P_alta_total_mcap_10d + 0.25 × P_alta_preço + 0.20 × P_alta_global365d
+        const pAltaFinal = (0.55 * pAltaMcap10d) + (0.25 * pAltaPreco) + (0.20 * pAltaMcap365d);
         const pQuedaFinal = 1 - pAltaFinal;
 
         // ========== ETAPA 5: DEFINIÇÃO DO TEXTO E PERCENTUAL ==========
@@ -550,7 +550,7 @@ Deno.serve(async (req) => {
         const zScoreSombra = (0 - muSombra) / (sigmaSombra + EPSILON);
         const pQuedaPrecoSombra = normalCDF(zScoreSombra);
         const pAltaPrecoSombra = 1 - pQuedaPrecoSombra;
-        const pAltaFinalSombra = (0.55 * pAltaMcap30d) + (0.25 * pAltaPrecoSombra) + (0.20 * pAltaGlobal365d);
+        const pAltaFinalSombra = (0.55 * pAltaMcap10d) + (0.25 * pAltaPrecoSombra) + (0.20 * pAltaGlobal365d);
         
         // Comparar com tolerâncias
         const diffMu = Math.abs(muCripto - muSombra);
@@ -636,7 +636,7 @@ Deno.serve(async (req) => {
           mu: muCripto,
           sigma: sigmaCripto,
           p_alta_preco: pAltaPreco,
-          p_alta_total_mcap_30d: pAltaMcap30d,
+          p_alta_total_mcap_10d: pAltaMcap10d,
           p_alta_global365d: pAltaMcap365d,
           p_final: pAltaFinal,
           direction,
@@ -701,17 +701,17 @@ Deno.serve(async (req) => {
     
     if (shadowResults.length >= 2) {
       // Validação 1: Componentes globais devem ser idênticos
-      const totalMcap30dProbs = shadowResults.map(r => r.p_alta_total_mcap_30d);
+      const totalMcap10dProbs = shadowResults.map(r => r.p_alta_total_mcap_10d);
       const global365dProbs = shadowResults.map(r => r.p_alta_global365d);
       
-      const allTotalMcap30dSame = totalMcap30dProbs.every(p => Math.abs(p - totalMcap30dProbs[0]) < 1e-9);
+      const allTotalMcap10dSame = totalMcap10dProbs.every(p => Math.abs(p - totalMcap10dProbs[0]) < 1e-9);
       const allGlobal365dSame = global365dProbs.every(p => Math.abs(p - global365dProbs[0]) < 1e-9);
       
-      if (!allTotalMcap30dSame) {
-        validationErrors.push(`P_alta_total_mcap_30d difere entre criptos: ${totalMcap30dProbs.map(p => p.toFixed(6)).join(', ')}`);
-        console.error(`   ❌ P_alta_total_mcap_30d não é idêntico para todas`);
+      if (!allTotalMcap10dSame) {
+        validationErrors.push(`P_alta_total_mcap_10d difere entre criptos: ${totalMcap10dProbs.map(p => p.toFixed(6)).join(', ')}`);
+        console.error(`   ❌ P_alta_total_mcap_10d não é idêntico para todas`);
       } else {
-        console.log(`   ✅ P_alta_total_mcap_30d idêntico: ${totalMcap30dProbs[0].toFixed(6)}`);
+        console.log(`   ✅ P_alta_total_mcap_10d idêntico: ${totalMcap10dProbs[0].toFixed(6)}`);
       }
       
       if (!allGlobal365dSame) {
@@ -842,14 +842,14 @@ Deno.serve(async (req) => {
     console.log('║       📋 AUDITORIA DO CÁLCULO DIÁRIO                     ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
     console.log(`⏰ Timestamp: ${new Date(calculationDate).toISOString()}`);
-    console.log(`\n💰 COMPONENTE TOTAL CRYPTO MARKET CAP 30 DIAS (55% - IGUAL PARA TODAS):`);
+    console.log(`\n💰 COMPONENTE TOTAL CRYPTO MARKET CAP 10 DIAS (55% - IGUAL PARA TODAS):`);
     console.log(`   ┌─ Dados de entrada:`);
-    console.log(`   │  μ (30d) = ${mcap30dLogReturns.length > 0 ? mean(mcap30dLogReturns).toFixed(6) : 'N/A'}`);
-    console.log(`   │  σ (30d) = ${mcap30dLogReturns.length > 0 ? standardDeviation(mcap30dLogReturns).toFixed(6) : 'N/A'}`);
-    console.log(`   │  z-score = ${mcap30dZScore.toFixed(4)}`);
+    console.log(`   │  μ (10d) = ${mcap10dLogReturns.length > 0 ? mean(mcap10dLogReturns).toFixed(6) : 'N/A'}`);
+    console.log(`   │  σ (10d) = ${mcap10dLogReturns.length > 0 ? standardDeviation(mcap10dLogReturns).toFixed(6) : 'N/A'}`);
+    console.log(`   │  z-score (10d) = ${mcap10dZScore.toFixed(4)}`);
     console.log(`   └─ Resultado:`);
-    console.log(`      P(alta|total_mcap_30d) = ${(pAltaTotalMcap30d * 100).toFixed(2)}%`);
-    console.log(`      P(queda|total_mcap_30d) = ${((1 - pAltaTotalMcap30d) * 100).toFixed(2)}%`);
+    console.log(`      P(alta|total_mcap_10d) = ${(pAltaTotalMcap10d * 100).toFixed(2)}%`);
+    console.log(`      P(queda|total_mcap_10d) = ${((1 - pAltaTotalMcap10d) * 100).toFixed(2)}%`);
     console.log(`\n🌍 COMPONENTE GLOBAL 365d (20% - IGUAL PARA TODAS):`);
     console.log(`   ┌─ Dados de entrada:`);
     console.log(`   │  Δ_7d (Total Market Cap) = ${deltaCapAvg7d.toFixed(6)}%`);
@@ -873,14 +873,14 @@ Deno.serve(async (req) => {
       console.log(`      • ATH: $${r.athPrice.toFixed(6)} (${r.athDate})`);
       console.log(`      • μ: ${r.mu.toFixed(6)}, σ: ${r.sigma.toFixed(6)}`);
       console.log(`      • P(alta|preço) [25%]: ${(r.p_alta_preco * 100).toFixed(2)}%`);
-      console.log(`      • P(alta|total_mcap_30d) [55%]: ${(r.p_alta_total_mcap_30d * 100).toFixed(2)}%`);
+      console.log(`      • P(alta|total_mcap_10d) [55%]: ${(r.p_alta_total_mcap_10d * 100).toFixed(2)}%`);
       console.log(`      • P(alta|global365d) [20%]: ${(r.p_alta_global365d * 100).toFixed(2)}%`);
       console.log(`      • P_final: ${(r.p_final * 100).toFixed(2)}%`);
       console.log(`      • Direção: ${r.direction.toUpperCase()} (${r.percentage.toFixed(1)}%)`);
     });
     
     console.log(`\n✅ VALIDAÇÃO (Critérios de Aceite):`);
-    console.log(`   [${pAltaTotalMcap30d !== 0.5 ? '✓' : '✗'}] Componente 55% usa Total Market Cap 30 dias`);
+    console.log(`   [${pAltaTotalMcap10d !== 0.5 ? '✓' : '✗'}] Componente 55% usa Total Market Cap 10 dias`);
     console.log(`   [${pAltaGlobal365d !== 0.5 ? '✓' : '✗'}] Componente 20% usa Total Market Cap global 365d`);
     console.log(`   [${successCount > 0 ? '✓' : '✗'}] Pelo menos 1 cripto foi calculada`);
     console.log(`   [${shadowResults.length > 0 ? '✓' : '✗'}] Validações em sombra passaram`);
@@ -927,11 +927,11 @@ Deno.serve(async (req) => {
         validation_errors: validationErrors,
         all_validations_passed: allValidationsPassed,
         calculation_date: calculationDate,
-        total_mcap_30d_component: {
-          p_alta_total_mcap_30d: pAltaTotalMcap30d,
-          z_score: mcap30dZScore,
-          mu_30d: mcap30dLogReturns.length > 0 ? mean(mcap30dLogReturns) : 0,
-          sigma_30d: mcap30dLogReturns.length > 0 ? standardDeviation(mcap30dLogReturns) : 0,
+        total_mcap_10d_component: {
+          p_alta_total_mcap_10d: pAltaTotalMcap10d,
+          z_score_10d: mcap10dZScore,
+          mu_10d: mcap10dLogReturns.length > 0 ? mean(mcap10dLogReturns) : 0,
+          sigma_10d: mcap10dLogReturns.length > 0 ? standardDeviation(mcap10dLogReturns) : 0,
           peso: '55%'
         },
         global_365d_component: {
