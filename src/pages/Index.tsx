@@ -156,7 +156,7 @@ const Index = () => {
       {/* Login Container */}
       <div className="relative z-10 w-full max-w-md px-6 mx-4 py-0 -mt-8 sm:-mt-12">
         {/* Logo */}
-        <div className="flex justify-center -mb-10 sm:-mb-8 animate-float">
+        <div className="flex justify-center -mb-10 sm:-mb-8">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
