@@ -118,6 +118,33 @@ export type Database = {
           },
         ]
       }
+      cron_execution_logs: {
+        Row: {
+          created_at: string | null
+          details: Json | null
+          executed_at: string | null
+          id: string
+          job_name: string
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          details?: Json | null
+          executed_at?: string | null
+          id?: string
+          job_name: string
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          details?: Json | null
+          executed_at?: string | null
+          id?: string
+          job_name?: string
+          status?: string | null
+        }
+        Relationships: []
+      }
       crypto_ath_cache: {
         Row: {
           ath_date: string
@@ -813,6 +840,7 @@ export type Database = {
     }
     Functions: {
       backend_health_check: { Args: never; Returns: Json }
+      cleanup_old_cron_logs: { Args: never; Returns: undefined }
       cleanup_old_crypto_data: { Args: never; Returns: undefined }
       create_user_session: {
         Args: {
