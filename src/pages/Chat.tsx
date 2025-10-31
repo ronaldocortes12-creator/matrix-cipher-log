@@ -125,7 +125,7 @@ const Chat = () => {
 
       // Ativar próximo dia
       const nextLessonNumber = currentLesson.lesson_number + 1;
-      if (nextLessonNumber <= 20) {
+      if (nextLessonNumber <= 21) {
         const { data: nextLesson } = await supabase
           .from('lessons')
           .select('*')
@@ -208,6 +208,7 @@ const Chat = () => {
       18: "Dia 18 - Acompanhamento e Metas",
       19: "Dia 19 - Consultoria Permanente",
       20: "Dia 20 - Liberdade Financeira",
+      21: "Dia 21 - Consultoria de Operações com Jeff Wu",
     };
 
     const { data, error } = await supabase
@@ -227,7 +228,7 @@ const Chat = () => {
       const missingLessons = [];
       
       // Criar as lições que faltam
-      for (let i = 1; i <= 20; i++) {
+      for (let i = 1; i <= 21; i++) {
         if (!existingNumbers.includes(i)) {
           missingLessons.push({
             user_id: uid,
@@ -277,8 +278,8 @@ const Chat = () => {
         setActiveLessonId(activeLesson.id);
       }
     } else {
-      // Não existe nenhuma lição, criar todas as 20
-      const lessonsToCreate = Array.from({ length: 20 }, (_, i) => ({
+      // Não existe nenhuma lição, criar todas as 21
+      const lessonsToCreate = Array.from({ length: 21 }, (_, i) => ({
         user_id: uid,
         lesson_number: i + 1,
         title: lessonTitles[i + 1],

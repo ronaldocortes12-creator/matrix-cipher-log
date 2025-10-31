@@ -1,4 +1,4 @@
-import { BookOpen, Plus, TrendingUp, Lock, ChevronLeft } from "lucide-react";
+import { BookOpen, Plus, TrendingUp, Lock, ChevronLeft, Award } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { UserHeader } from "./UserHeader";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,7 @@ export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson, onToggleS
           {lessons.map((lesson) => {
             const isLocked = lesson.status === 'pending';
             const isClickable = !isLocked;
+            const isSpecial = lesson.lesson_number === 21;
             
             return (
               <button
@@ -60,24 +61,26 @@ export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson, onToggleS
                 disabled={isLocked}
                 className={cn(
                   "w-full p-3 rounded-lg text-left transition-all duration-300 group",
-                  isLocked 
-                    ? "bg-card/10 border border-border/50 opacity-60 cursor-not-allowed"
-                    : "hover:bg-primary/10 hover:border-primary/30",
-                  activeLessonId === lesson.id && !isLocked
+                  isSpecial && "bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-red-500/10 border-2 border-yellow-500/40 hover:scale-[1.02] hover:border-yellow-500/60",
+                  !isSpecial && isLocked && "bg-card/10 border border-border/50 opacity-60 cursor-not-allowed",
+                  !isSpecial && !isLocked && "hover:bg-primary/10 hover:border-primary/30",
+                  !isSpecial && activeLessonId === lesson.id && !isLocked
                     ? "bg-primary/20 border border-primary/40"
-                    : !isLocked && "bg-card/30 border border-border"
+                    : !isSpecial && !isLocked && "bg-card/30 border border-border",
+                  isSpecial && activeLessonId === lesson.id && "bg-gradient-to-r from-yellow-500/20 via-orange-500/20 to-red-500/20 border-2 border-yellow-500/60"
                 )}
               >
                 <div className="flex items-start gap-3">
                   <div className={cn(
                     "p-2 rounded-lg",
-                    lesson.status === 'completed' 
-                      ? "bg-green-500/20 text-green-400"
-                      : lesson.status === 'active'
-                      ? "bg-primary/20 text-primary"
-                      : "bg-muted/20 text-muted-foreground"
+                    isSpecial && "bg-yellow-500/20 text-yellow-500",
+                    !isSpecial && lesson.status === 'completed' && "bg-green-500/20 text-green-400",
+                    !isSpecial && lesson.status === 'active' && "bg-primary/20 text-primary",
+                    !isSpecial && lesson.status === 'pending' && "bg-muted/20 text-muted-foreground"
                   )}>
-                    {isLocked ? (
+                    {isSpecial ? (
+                      <Award className="h-5 w-5" />
+                    ) : isLocked ? (
                       <Lock className="h-4 w-4" />
                     ) : (
                       <BookOpen className="h-4 w-4" />
@@ -88,27 +91,34 @@ export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson, onToggleS
                     <div className="flex items-center gap-2">
                       <span className={cn(
                         "text-xs font-medium",
-                        lesson.status === 'completed'
-                          ? "text-green-400"
-                          : lesson.status === 'active'
-                          ? "text-primary"
-                          : "text-muted-foreground"
+                        isSpecial && "text-yellow-500",
+                        !isSpecial && lesson.status === 'completed' && "text-green-400",
+                        !isSpecial && lesson.status === 'active' && "text-primary",
+                        !isSpecial && lesson.status === 'pending' && "text-muted-foreground"
                       )}>
                         Dia {lesson.lesson_number}
                       </span>
                       {lesson.status === 'completed' && (
                         <span className="text-green-400 text-xs">✓</span>
                       )}
-                      {isLocked && (
+                      {isLocked && !isSpecial && (
                         <span className="text-muted-foreground text-xs">🔒</span>
                       )}
                     </div>
                     <p className={cn(
                       "text-sm mt-1 line-clamp-2",
-                      activeLessonId === lesson.id && !isLocked ? "text-foreground" : "text-muted-foreground"
+                      isSpecial && "text-yellow-500/90 font-medium",
+                      !isSpecial && activeLessonId === lesson.id && !isLocked && "text-foreground",
+                      !isSpecial && (activeLessonId !== lesson.id || isLocked) && "text-muted-foreground"
                     )}>
                       {lesson.title.replace(/^Dia \d+ - /, '')}
                     </p>
+                    
+                    {isSpecial && (
+                      <p className="text-xs text-yellow-500/70 mt-2 italic leading-tight">
+                        Aqui, suas operações serão guiadas por nosso Especialista Estatístico em Cripto
+                      </p>
+                    )}
                   </div>
                 </div>
               </button>

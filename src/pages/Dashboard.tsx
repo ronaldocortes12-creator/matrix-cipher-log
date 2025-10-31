@@ -75,6 +75,14 @@ const Dashboard = () => {
         { day: 20, title: "Liberdade Financeira", completed: false },
       ],
     },
+    {
+      id: "5",
+      title: "CONSULTORIA PREMIUM",
+      color: "hsl(45, 95%, 60%)",
+      lessons: [
+        { day: 21, title: "Consultoria de Operações com Jeff Wu", completed: false },
+      ],
+    },
   ]);
 
   useEffect(() => {
@@ -165,58 +173,90 @@ const Dashboard = () => {
 
         {/* Modules Accordion */}
         <Accordion type="single" collapsible className="space-y-3">
-          {modules.map((module) => (
-            <AccordionItem
-              key={module.id}
-              value={module.id}
-              className="glass-effect rounded-xl border-0 overflow-hidden"
-              style={{
-                boxShadow: `0 0 20px ${module.color}30`,
-              }}
-            >
-              <AccordionTrigger
-                className="px-5 py-4 hover:no-underline"
+          {modules.map((module) => {
+            const isSpecial = module.id === "5";
+            
+            return (
+              <AccordionItem
+                key={module.id}
+                value={module.id}
+                className={cn(
+                  "glass-effect rounded-xl border-0 overflow-hidden",
+                  isSpecial && "bg-gradient-to-r from-yellow-500/5 via-orange-500/5 to-red-500/5 border-2 border-yellow-500/30"
+                )}
                 style={{
-                  borderLeft: `4px solid ${module.color}`,
+                  boxShadow: isSpecial 
+                    ? `0 0 30px ${module.color}60, 0 0 50px ${module.color}30`
+                    : `0 0 20px ${module.color}30`,
                 }}
               >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: module.color }}
-                  />
-                  <span className="font-semibold text-foreground">{module.title}</span>
-                </div>
-              </AccordionTrigger>
-              
-              <AccordionContent className="px-5 pb-4">
-                <div className="space-y-2 pt-2">
-                  {module.lessons.map((lesson, idx) => (
+                <AccordionTrigger
+                  className="px-5 py-4 hover:no-underline"
+                  style={{
+                    borderLeft: `4px solid ${module.color}`,
+                  }}
+                >
+                  <div className="flex items-center gap-3">
                     <div
-                      key={idx}
-                      className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg transition-all",
-                        lesson.completed
-                          ? "bg-primary/10 text-foreground"
-                          : "bg-muted/30 text-muted-foreground"
-                      )}
-                    >
-                      <CheckCircle2
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: module.color }}
+                    />
+                    <span className={cn(
+                      "font-semibold",
+                      isSpecial ? "text-yellow-500" : "text-foreground"
+                    )}>
+                      {module.title}
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                
+                <AccordionContent className="px-5 pb-4">
+                  <div className="space-y-2 pt-2">
+                    {module.lessons.map((lesson, idx) => (
+                      <div
+                        key={idx}
                         className={cn(
-                          "h-4 w-4 shrink-0",
-                          lesson.completed ? "text-primary" : "text-muted-foreground/50"
+                          "flex items-center gap-3 p-3 rounded-lg transition-all",
+                          isSpecial && "bg-yellow-500/10 border border-yellow-500/20",
+                          !isSpecial && lesson.completed && "bg-primary/10 text-foreground",
+                          !isSpecial && !lesson.completed && "bg-muted/30 text-muted-foreground"
                         )}
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">Dia {lesson.day}</span>
-                        <span className="text-xs text-muted-foreground">{lesson.title}</span>
+                      >
+                        <CheckCircle2
+                          className={cn(
+                            "h-4 w-4 shrink-0",
+                            isSpecial && "text-yellow-500",
+                            !isSpecial && lesson.completed && "text-primary",
+                            !isSpecial && !lesson.completed && "text-muted-foreground/50"
+                          )}
+                        />
+                        <div className="flex flex-col">
+                          <span className={cn(
+                            "text-sm font-medium",
+                            isSpecial && "text-yellow-500"
+                          )}>
+                            Dia {lesson.day}
+                          </span>
+                          <span className={cn(
+                            "text-xs",
+                            isSpecial ? "text-yellow-500/80" : "text-muted-foreground"
+                          )}>
+                            {lesson.title}
+                          </span>
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                  
+                  {isSpecial && (
+                    <div className="px-3 py-3 text-xs text-yellow-500/70 italic border-t border-yellow-500/20 mt-3 pt-3">
+                      Aqui, suas operações serão guiadas por nosso Especialista Estatístico em Cripto
                     </div>
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          ))}
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
         </Accordion>
       </div>
 
