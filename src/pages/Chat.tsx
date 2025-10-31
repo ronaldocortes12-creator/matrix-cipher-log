@@ -41,7 +41,7 @@ const Chat = () => {
   const [canCompleteLesson, setCanCompleteLesson] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
@@ -52,10 +52,10 @@ const Chat = () => {
   useEffect(() => {
     if (messages.length > 0) {
       if (isInitialLoad) {
-        scrollToBottomInstant();
+        scrollToBottom(false);
         setIsInitialLoad(false);
       } else {
-        scrollToBottomSmooth();
+        scrollToBottom(true);
       }
     }
   }, [messages]);
@@ -71,22 +71,15 @@ const Chat = () => {
     setIsSidebarOpen(!isMobile);
   }, [isMobile]);
 
-  const scrollToBottomInstant = () => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ 
-        behavior: "instant",
-        block: "end" 
+  const scrollToBottom = (smooth = false) => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto',
       });
-    }, 100);
-  };
-
-  const scrollToBottomSmooth = () => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ 
-        behavior: "smooth",
-        block: "end" 
-      });
-    }, 50);
+    });
   };
 
   const handleCompleteDay = async () => {
@@ -345,7 +338,7 @@ const Chat = () => {
         role: msg.role as "user" | "assistant",
         content: msg.content
       })));
-      scrollToBottomInstant();
+      scrollToBottom(false);
     } else {
       // Initial message
       const initialMessage: Message = {
@@ -354,7 +347,7 @@ const Chat = () => {
         content: "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte."
       };
       setMessages([initialMessage]);
-      scrollToBottomInstant();
+      scrollToBottom(false);
       
       if (uid && activeLessonId) {
         await supabase.from('chat_messages').insert({
@@ -722,7 +715,7 @@ const Chat = () => {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col relative z-10">
         {/* Messages */}
-        <ScrollArea className="flex-1">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overscroll-y-contain scroll-smooth">
           <div className="p-4 space-y-4">
             {isLoadingHistory ? (
               <div className="flex items-center justify-center p-8">
@@ -762,11 +755,10 @@ const Chat = () => {
                     </div>
                   </div>
                 ))}
-                <div ref={messagesEndRef} />
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Input */}
         <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-primary/20 mb-16 space-y-2">
@@ -817,7 +809,7 @@ const Chat = () => {
         isOpen={showCelebration}
         onClose={() => setShowCelebration(false)}
         lessonNumber={completedLessonNumber}
-        totalLessons={20}
+        totalLessons={21}
       />
 
       <TabBar />
