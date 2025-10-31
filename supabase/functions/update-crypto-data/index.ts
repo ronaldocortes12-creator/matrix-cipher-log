@@ -232,45 +232,40 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ETAPA 3: ATUALIZAR MARKET CAP GLOBAL
-    console.log('\n\n💰 ETAPA 3: Atualizando Market Cap Global...\n');
+    // ETAPA 3: ATUALIZAR MARKET CAP GLOBAL ATUAL
+    console.log('\n\n💰 ETAPA 3: Atualizando Market Cap Global Atual...\n');
 
     try {
-      const mcap365Response = await fetch(
-        'https://api.coingecko.com/api/v3/global/market_cap_chart?days=365'
-      );
-
-      if (mcap365Response.ok) {
-        const mcapData = await mcap365Response.json();
-        const marketCapHistory = mcapData.market_cap_chart?.usd || [];
-
-        console.log(`✓ Recebidos ${marketCapHistory.length} dias de Global Market Cap`);
-
-        const globalMcapBatch = marketCapHistory.map(([timestamp, totalMcap]: [number, number], index: number) => {
-          let dailyChangePct = null;
-          if (index > 0) {
-            const previousMcap = marketCapHistory[index - 1][1];
-            if (previousMcap > 0) {
-              dailyChangePct = ((totalMcap - previousMcap) / previousMcap) * 100;
-            }
-          }
-
-          return {
-            date: new Date(timestamp).toISOString().split('T')[0],
-            total_market_cap: totalMcap,
-            daily_change_pct: dailyChangePct,
-          };
-        });
-
+      // Buscar dados globais atuais do mercado
+      const globalResponse = await fetch('https://api.coingecko.com/api/v3/global');
+      
+      if (globalResponse.ok) {
+        const globalData = await globalResponse.json();
+        const marketCapData = globalData.data;
+        
+        const totalMarketCapUSD = marketCapData.total_market_cap.usd;
+        const marketCapChangePercent = marketCapData.market_cap_change_percentage_24h_usd;
+        
+        console.log(`✓ Market Cap Global Atual: $${(totalMarketCapUSD / 1e12).toFixed(2)}T`);
+        console.log(`✓ Mudança 24h: ${marketCapChangePercent.toFixed(2)}%`);
+        
+        // Salvar no banco (data de hoje)
+        const today = new Date().toISOString().split('T')[0];
         const { error: globalError } = await supabase
           .from('global_crypto_market_cap')
-          .upsert(globalMcapBatch, { onConflict: 'date' });
-
+          .upsert({
+            date: today,
+            total_market_cap: totalMarketCapUSD,
+            daily_change_pct: marketCapChangePercent,
+          }, { onConflict: 'date' });
+        
         if (globalError) {
           console.error('⚠️ Erro ao atualizar Global Market Cap:', globalError.message);
         } else {
-          console.log(`✅ ${globalMcapBatch.length} dias de Global Market Cap atualizados`);
+          console.log('✅ Global Market Cap atualizado com sucesso');
         }
+      } else {
+        console.error('❌ Erro ao buscar dados globais:', globalResponse.status);
       }
     } catch (error) {
       console.error('❌ Erro ao buscar Global Market Cap:', error);
