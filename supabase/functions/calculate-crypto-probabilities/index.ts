@@ -272,12 +272,15 @@ Deno.serve(async (req) => {
         const muMcap10d = mean(mcap10dLogReturns);
         const sigmaMcap10d = standardDeviation(mcap10dLogReturns);
         
-        // Calcular z-score: (μ - 0) / σ
-        mcap10dZScore = muMcap10d / (sigmaMcap10d + EPSILON);
+        // Calcular z-score: usar estatística t com correção por tamanho da amostra (√n)
+        const n10 = mcap10dLogReturns.length;
+        mcap10dZScore = (muMcap10d / (sigmaMcap10d + EPSILON)) * Math.sqrt(n10);
         
-        // Converter z-score em probabilidade usando função logística (sigmoide) com maior sensibilidade
-        const SLOPE_10D = 3.0;
+        // Converter z-score em probabilidade (sigmoide) com calibração mais sensível
+        const SLOPE_10D = 1.8;
         pAltaTotalMcap10d = 1 / (1 + Math.exp(-SLOPE_10D * mcap10dZScore));
+        // Forçar leve afastamento do 50% para evitar clustering
+        pAltaTotalMcap10d = Math.min(0.9, Math.max(0.1, pAltaTotalMcap10d));
         
         const mcapInicial = parseFloat(sortedMcap[0].total_market_cap as string);
         const mcapFinal = parseFloat(sortedMcap[sortedMcap.length - 1].total_market_cap as string);
@@ -285,9 +288,10 @@ Deno.serve(async (req) => {
         
         console.log(`  📊 Total Market Cap inicial (10d atrás): $${(mcapInicial / 1e12).toFixed(2)}T`);
         console.log(`  📊 Total Market Cap final (hoje): $${(mcapFinal / 1e12).toFixed(2)}T`);
-        console.log(`  📊 Variação 10 dias: ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
+        console.log(`  📊 Variação 10 dias: $${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
+        console.log(`  📈 n (10d) = ${mcap10dLogReturns.length}`);
         console.log(`  📈 μ (10d) = ${muMcap10d.toFixed(6)}, σ (10d) = ${sigmaMcap10d.toFixed(6)}`);
-        console.log(`  📈 z-score (10d) = ${mcap10dZScore.toFixed(4)}`);
+        console.log(`  📈 z-score (10d) = ${mcap10dZScore.toFixed(4)} (slope=${SLOPE_10D})`);
         console.log(`  💎 P(alta|total_mcap_10d) = ${(pAltaTotalMcap10d * 100).toFixed(2)}%`);
         console.log(`  ✅ Componente 10d (55%): MESMO para TODAS as criptos`);
       } else {
