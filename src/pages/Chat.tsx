@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import jeffAvatar from "@/assets/jeff-wu-avatar.png";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { LessonCompleteAnimation } from "@/components/LessonCompleteAnimation";
 
 type Message = {
   id: number;
@@ -35,6 +36,8 @@ const Chat = () => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [completedLessonNumber, setCompletedLessonNumber] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -396,31 +399,42 @@ const Chat = () => {
           "vamos para o dia",
           "vamos para o próximo dia",
           "próximo dia",
-          "dia 2",
-          "dia dois"
+          "finalizamos",
+          "terminamos"
         ];
         
         if (completionPhrases.some(phrase => assistantContent.toLowerCase().includes(phrase))) {
           const currentLesson = lessons.find(l => l.id === activeLessonId);
           if (currentLesson) {
+            // Marcar aula atual como concluída
             await supabase
               .from('lessons')
               .update({ status: 'completed' })
               .eq('id', activeLessonId);
 
             const nextLessonNumber = currentLesson.lesson_number + 1;
-            if (nextLessonNumber <= 20) {
-              // Activate next lesson (it should already exist)
-              await supabase
-                .from('lessons')
-                .update({ status: 'active' })
-                .eq('user_id', userId)
-                .eq('lesson_number', nextLessonNumber);
+            
+            // Mostrar animação de celebração
+            setCompletedLessonNumber(currentLesson.lesson_number);
+            setShowCelebration(true);
 
-              toast({
-                title: "Aula concluída!",
-                description: `Parabéns! Você completou a aula ${currentLesson.lesson_number}.`,
-              });
+            // Ativar APENAS a próxima aula em sequência
+            if (nextLessonNumber <= 20) {
+              // Buscar a próxima aula
+              const { data: nextLesson } = await supabase
+                .from('lessons')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('lesson_number', nextLessonNumber)
+                .single();
+
+              if (nextLesson) {
+                // Ativar apenas a próxima aula sequencial
+                await supabase
+                  .from('lessons')
+                  .update({ status: 'active' })
+                  .eq('id', nextLesson.id);
+              }
               
               await loadLessons(userId);
             }
@@ -556,6 +570,14 @@ const Chat = () => {
           </div>
         </div>
       </div>
+
+      {/* Animação de conclusão de aula */}
+      <LessonCompleteAnimation
+        isOpen={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        lessonNumber={completedLessonNumber}
+        totalLessons={20}
+      />
 
       <TabBar />
     </div>
