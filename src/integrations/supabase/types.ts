@@ -548,6 +548,7 @@ export type Database = {
       }
       lessons: {
         Row: {
+          can_complete: boolean | null
           created_at: string | null
           id: string
           lesson_number: number
@@ -557,6 +558,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          can_complete?: boolean | null
           created_at?: string | null
           id?: string
           lesson_number: number
@@ -566,6 +568,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          can_complete?: boolean | null
           created_at?: string | null
           id?: string
           lesson_number?: number

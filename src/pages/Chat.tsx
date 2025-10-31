@@ -38,6 +38,7 @@ const Chat = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showCelebration, setShowCelebration] = useState(false);
   const [completedLessonNumber, setCompletedLessonNumber] = useState(0);
+  const [canCompleteLesson, setCanCompleteLesson] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -60,7 +61,7 @@ const Chat = () => {
   };
 
   const handleCompleteDay = async () => {
-    if (!userId || !activeLessonId) return;
+    if (!userId || !activeLessonId || !canCompleteLesson) return;
 
     const currentLesson = lessons.find(l => l.id === activeLessonId);
     if (!currentLesson || currentLesson.status === 'completed') return;
@@ -68,10 +69,13 @@ const Chat = () => {
     try {
       console.log(`[CompleteDay] Marcando dia ${currentLesson.lesson_number} como concluído`);
 
-      // Marcar aula como concluída
+      // Marcar aula como concluída e resetar can_complete
       const { error: lessonError } = await supabase
         .from('lessons')
-        .update({ status: 'completed' })
+        .update({ 
+          status: 'completed',
+          can_complete: false 
+        })
         .eq('id', activeLessonId);
 
       if (lessonError) throw lessonError;
@@ -107,6 +111,9 @@ const Chat = () => {
             .eq('id', nextLesson.id);
         }
       }
+
+      // Resetar autorização
+      setCanCompleteLesson(false);
 
       // Mostrar celebração
       setCompletedLessonNumber(currentLesson.lesson_number);
@@ -274,6 +281,17 @@ const Chat = () => {
   const loadChatHistory = async (uid: string) => {
     const activeLesson = lessons.find(l => l.id === activeLessonId);
     
+    // Verificar se aula atual já foi autorizada para conclusão
+    if (activeLessonId) {
+      const { data: lessonData } = await supabase
+        .from('lessons')
+        .select('can_complete')
+        .eq('id', activeLessonId)
+        .single();
+      
+      setCanCompleteLesson(lessonData?.can_complete || false);
+    }
+    
     const query = supabase
       .from('chat_messages')
       .select('*')
@@ -320,6 +338,7 @@ const Chat = () => {
   const handleSelectLesson = async (lessonId: string) => {
     setActiveLessonId(lessonId);
     setMessages([]);
+    setCanCompleteLesson(false); // Reset ao trocar de aula
     if (userId) {
       await loadChatHistory(userId);
     }
@@ -440,6 +459,40 @@ const Chat = () => {
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               assistantContent += content;
+              
+              // Detectar frases de autorização para conclusão
+              const authorizationPhrases = [
+                "podemos fechar",
+                "pode avançar",
+                "aula concluída",
+                "dia concluído",
+                "próxima aula",
+                "vamos para o dia",
+                "vamos para o próximo dia",
+                "próximo dia",
+                "finalizamos",
+                "terminamos",
+                "parabéns",
+                "você completou",
+                "pode concluir",
+                "concluir o dia",
+                "avançar para o próximo"
+              ];
+              
+              const contentLower = assistantContent.toLowerCase();
+              if (authorizationPhrases.some(phrase => contentLower.includes(phrase))) {
+                if (!canCompleteLesson) {
+                  console.log('[Authorization] Jeff Wu autorizou conclusão do dia');
+                  setCanCompleteLesson(true);
+                  
+                  // Salvar autorização no banco
+                  await supabase
+                    .from('lessons')
+                    .update({ can_complete: true })
+                    .eq('id', activeLessonId);
+                }
+              }
+              
               setMessages(prev => prev.map(m =>
                 m.id === assistantMessageId
                   ? { ...m, content: assistantContent }
@@ -672,9 +725,18 @@ const Chat = () => {
               <Button
                 onClick={handleCompleteDay}
                 variant="outline"
-                className="glass-effect border-primary/40 hover:bg-primary/20 text-primary font-semibold"
+                disabled={!canCompleteLesson}
+                className={`glass-effect border-primary/40 font-semibold transition-all ${
+                  canCompleteLesson 
+                    ? 'hover:bg-primary/20 text-primary cursor-pointer animate-pulse' 
+                    : 'opacity-50 cursor-not-allowed text-muted-foreground'
+                }`}
+                title={canCompleteLesson 
+                  ? 'Clique para concluir o dia' 
+                  : 'Aguarde Jeff Wu autorizar a conclusão desta aula'
+                }
               >
-                ✅ Concluir Dia {lessons.find(l => l.id === activeLessonId)?.lesson_number}
+                {canCompleteLesson ? '✅' : '🔒'} Concluir Dia {lessons.find(l => l.id === activeLessonId)?.lesson_number}
               </Button>
             </div>
           )}
