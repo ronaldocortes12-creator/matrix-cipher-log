@@ -59,6 +59,18 @@ const Index = () => {
           title: t('login.loginSuccess'),
         });
 
+        // Executar enforcement para corrigir estados imediatamente
+        try {
+          console.log('[Login] Enforcing lesson states for user:', data.user.id);
+          await supabase.functions.invoke('enforce-lesson-states', {
+            body: { user_id: data.user.id }
+          });
+          console.log('[Login] Lesson states enforced successfully');
+        } catch (enforceError) {
+          console.error('[Login] Error enforcing lesson states:', enforceError);
+          // Continuar mesmo se falhar - o cron vai corrigir depois
+        }
+
         // Sempre redirecionar para seleção de idioma após login
         window.location.href = "/language-selection";
       }
@@ -88,6 +100,19 @@ const Index = () => {
         title: t('login.signupSuccess'),
         description: t('login.signupDescription'),
       });
+
+      // Executar enforcement para usuário recém-criado
+      if (data.user) {
+        try {
+          console.log('[Signup] Enforcing lesson states for new user:', data.user.id);
+          await supabase.functions.invoke('enforce-lesson-states', {
+            body: { user_id: data.user.id }
+          });
+          console.log('[Signup] Lesson states enforced successfully');
+        } catch (enforceError) {
+          console.error('[Signup] Error enforcing lesson states:', enforceError);
+        }
+      }
 
       // Redirecionar para seleção de idioma após signup
       window.location.href = "/language-selection";

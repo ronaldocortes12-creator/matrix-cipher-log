@@ -59,6 +59,77 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleCompleteDay = async () => {
+    if (!userId || !activeLessonId) return;
+
+    const currentLesson = lessons.find(l => l.id === activeLessonId);
+    if (!currentLesson || currentLesson.status === 'completed') return;
+
+    try {
+      console.log(`[CompleteDay] Marcando dia ${currentLesson.lesson_number} como concluído`);
+
+      // Marcar aula como concluída
+      const { error: lessonError } = await supabase
+        .from('lessons')
+        .update({ status: 'completed' })
+        .eq('id', activeLessonId);
+
+      if (lessonError) throw lessonError;
+
+      // Upsert em lesson_progress
+      const { error: progressError } = await supabase
+        .from('lesson_progress')
+        .upsert({
+          user_id: userId,
+          lesson_day: currentLesson.lesson_number,
+          completed: true,
+          completed_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,lesson_day'
+        });
+
+      if (progressError) throw progressError;
+
+      // Ativar próximo dia
+      const nextLessonNumber = currentLesson.lesson_number + 1;
+      if (nextLessonNumber <= 20) {
+        const { data: nextLesson } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('lesson_number', nextLessonNumber)
+          .single();
+
+        if (nextLesson) {
+          await supabase
+            .from('lessons')
+            .update({ status: 'active' })
+            .eq('id', nextLesson.id);
+        }
+      }
+
+      // Mostrar celebração
+      setCompletedLessonNumber(currentLesson.lesson_number);
+      setShowCelebration(true);
+
+      // Recarregar lições
+      await loadLessons(userId);
+
+      toast({
+        title: "Dia concluído!",
+        description: `Parabéns! Você completou o Dia ${currentLesson.lesson_number}.`,
+      });
+
+    } catch (error: any) {
+      console.error('[CompleteDay] Erro ao concluir dia:', error);
+      toast({
+        title: "Erro ao concluir dia",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   const initializeChat = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -594,7 +665,20 @@ const Chat = () => {
         </ScrollArea>
 
         {/* Input */}
-        <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-primary/20 mb-16">
+        <div className="p-4 bg-card/50 backdrop-blur-xl border-t border-primary/20 mb-16 space-y-2">
+          {/* Botão Concluir Dia */}
+          {activeLessonId && lessons.find(l => l.id === activeLessonId && l.status === 'active') && (
+            <div className="flex justify-center">
+              <Button
+                onClick={handleCompleteDay}
+                variant="outline"
+                className="glass-effect border-primary/40 hover:bg-primary/20 text-primary font-semibold"
+              >
+                ✅ Concluir Dia {lessons.find(l => l.id === activeLessonId)?.lesson_number}
+              </Button>
+            </div>
+          )}
+          
           <div className="flex gap-2">
             <Input
               value={input}

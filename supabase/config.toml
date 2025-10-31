@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.calculate-crypto-probabilities]
 verify_jwt = false
+
+[functions.reconcile-lesson-progress]
+verify_jwt = false
+
+[functions.enforce-lesson-states]
+verify_jwt = false
