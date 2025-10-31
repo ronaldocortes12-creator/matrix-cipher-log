@@ -25,7 +25,7 @@ const CRYPTOS = [
   { symbol: 'LTC', coinId: 'litecoin' },
   { symbol: 'ICP', coinId: 'internet-computer' },
   { symbol: 'NEAR', coinId: 'near' },
-  { symbol: 'FET', coinId: 'fetch-ai' },
+  { symbol: 'FET', coinId: 'artificial-superintelligence-alliance' },
   { symbol: 'SUI', coinId: 'sui' },
   { symbol: 'WLD', coinId: 'worldcoin-wld' },
   { symbol: 'XLM', coinId: 'stellar' },
@@ -108,6 +108,8 @@ interface ShadowCalc {
   nDias: number;
   athPrice: number;
   athDate: string | null;
+  atlPrice: number;
+  atlDate: string | null;
 }
 
 // Função para calcular a função de distribuição cumulativa normal padrão (CDF)
@@ -158,48 +160,46 @@ async function fetchFallbackData(coinId: string, symbol: string) {
   }
 }
 
-// Função para buscar ATH com cache e retry logic
+// Função para buscar ATH e ATL com cache e retry logic + fallback robusto
 async function fetchATHWithCache(supabase: any, coinId: string, symbol: string, retries = 3) {
   // 1. Tentar buscar do cache primeiro
-  const { data: cachedATH } = await supabase
+  const { data: cachedData } = await supabase
     .from('crypto_ath_cache')
-    .select('ath_price, ath_date, last_updated')
+    .select('ath_price, ath_date, atl_price, atl_date, last_updated')
     .eq('symbol', symbol)
     .single();
 
   // Se cache existe e foi atualizado nos últimos 7 dias, usar
-  if (cachedATH && cachedATH.last_updated) {
-    const cacheAge = Date.now() - new Date(cachedATH.last_updated).getTime();
+  if (cachedData && cachedData.last_updated) {
+    const cacheAge = Date.now() - new Date(cachedData.last_updated).getTime();
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
     
-    if (cacheAge < sevenDaysMs) {
-      console.log(`  ✓ ATH ${symbol} do cache: $${cachedATH.ath_price} em ${cachedATH.ath_date} (cache: ${Math.floor(cacheAge / (24 * 60 * 60 * 1000))}d)`);
+    if (cacheAge < sevenDaysMs && cachedData.ath_price > 0 && cachedData.atl_price > 0) {
+      console.log(`  ✓ ATH/ATL ${symbol} do cache: ATH=$${cachedData.ath_price} (${cachedData.ath_date}), ATL=$${cachedData.atl_price} (${cachedData.atl_date}) - cache: ${Math.floor(cacheAge / (24 * 60 * 60 * 1000))}d`);
       return {
-        ath: parseFloat(cachedATH.ath_price),
-        athDate: cachedATH.ath_date
+        ath: parseFloat(cachedData.ath_price),
+        athDate: cachedData.ath_date,
+        atl: parseFloat(cachedData.atl_price),
+        atlDate: cachedData.atl_date,
+        source: 'cache'
       };
     }
   }
 
-  // 2. Se não tem cache ou está desatualizado, buscar da API com retry
+  // 2. Buscar da API /coins com retry
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      console.log(`  🏆 Buscando ATH real para ${symbol} (tentativa ${attempt}/${retries})...`);
+      console.log(`  🏆 Buscando ATH/ATL real para ${symbol} (tentativa ${attempt}/${retries})...`);
       
-      // Delay exponencial entre tentativas
       if (attempt > 1) {
-        const delayMs = Math.pow(2, attempt - 1) * 1000; // 2s, 4s, 8s
+        const delayMs = Math.pow(2, attempt - 1) * 1000;
         console.log(`  ⏳ Aguardando ${delayMs/1000}s antes da tentativa...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
       
       const response = await fetch(
         `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`,
-        {
-          headers: {
-            'Accept': 'application/json'
-          }
-        }
+        { headers: { 'Accept': 'application/json' } }
       );
       
       if (!response.ok) {
@@ -207,15 +207,17 @@ async function fetchATHWithCache(supabase: any, coinId: string, symbol: string, 
           console.log(`  ⚠️ Rate limit (429), tentando novamente...`);
           continue;
         }
-        throw new Error(`CoinGecko API failed: ${response.status}`);
+        throw new Error(`CoinGecko /coins failed: ${response.status}`);
       }
       
       const data = await response.json();
       const ath = data.market_data?.ath?.usd || 0;
       const athDate = data.market_data?.ath_date?.usd || null;
+      const atl = data.market_data?.atl?.usd || 0;
+      const atlDate = data.market_data?.atl_date?.usd || null;
       
-      if (ath > 0 && athDate) {
-        console.log(`  ✓ ATH ${symbol}: $${ath.toFixed(2)} em ${athDate}`);
+      if (ath > 0 && athDate && atl > 0 && atlDate) {
+        console.log(`  ✓ ATH/ATL ${symbol}: ATH=$${ath.toFixed(2)} (${athDate}), ATL=$${atl.toFixed(8)} (${atlDate})`);
         
         // Salvar no cache
         await supabase
@@ -225,43 +227,122 @@ async function fetchATHWithCache(supabase: any, coinId: string, symbol: string, 
             coin_id: coinId,
             ath_price: ath,
             ath_date: athDate.split('T')[0],
+            atl_price: atl,
+            atl_date: atlDate.split('T')[0],
             last_updated: new Date().toISOString()
           }, {
             onConflict: 'symbol'
           });
         
-        return { ath, athDate: athDate.split('T')[0] };
+        return { 
+          ath, 
+          athDate: athDate.split('T')[0],
+          atl,
+          atlDate: atlDate.split('T')[0],
+          source: '/coins'
+        };
       }
       
-      throw new Error('ATH data incomplete');
+      throw new Error('ATH/ATL data incomplete from /coins');
       
     } catch (error) {
       if (attempt === retries) {
-        console.error(`  ❌ Todas as tentativas falharam para ATH de ${symbol}:`, error);
-        
-        // 3. FALLBACK: Usar máximo histórico do banco como último recurso
-        const { data: maxPrice } = await supabase
-          .from('crypto_historical_prices')
-          .select('date, closing_price')
-          .eq('symbol', symbol)
-          .order('closing_price', { ascending: false })
-          .limit(1)
-          .single();
-        
-        if (maxPrice && parseFloat(maxPrice.closing_price) > 0) {
-          console.log(`  🔄 FALLBACK: Usando máximo do banco: $${maxPrice.closing_price} em ${maxPrice.date}`);
-          return {
-            ath: parseFloat(maxPrice.closing_price) * 1.1, // 10% acima para ser conservador
-            athDate: maxPrice.date
-          };
-        }
-        
-        return { ath: 0, athDate: null };
+        console.error(`  ❌ /coins falhou para ${symbol}, tentando fallback /market_chart...`);
+        break;
       }
     }
   }
   
-  return { ath: 0, athDate: null };
+  // 3. FALLBACK ROBUSTO: market_chart?days=max
+  try {
+    console.log(`  🔄 Fallback: buscando histórico completo (days=max) para ${symbol}...`);
+    await new Promise(resolve => setTimeout(resolve, 2000)); // delay para evitar rate limit
+    
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=max&interval=daily`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`market_chart failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const prices = data.prices || [];
+    
+    if (prices.length > 0) {
+      let maxPrice = 0;
+      let maxDate = '';
+      let minPrice = Infinity;
+      let minDate = '';
+      
+      prices.forEach(([timestamp, price]: [number, number]) => {
+        if (price > maxPrice) {
+          maxPrice = price;
+          maxDate = new Date(timestamp).toISOString().split('T')[0];
+        }
+        if (price < minPrice) {
+          minPrice = price;
+          minDate = new Date(timestamp).toISOString().split('T')[0];
+        }
+      });
+      
+      if (maxPrice > 0 && minPrice < Infinity) {
+        console.log(`  ✓ Fallback OK: ATH=$${maxPrice.toFixed(2)} (${maxDate}), ATL=$${minPrice.toFixed(8)} (${minDate})`);
+        
+        // Salvar no cache
+        await supabase
+          .from('crypto_ath_cache')
+          .upsert({
+            symbol,
+            coin_id: coinId,
+            ath_price: maxPrice,
+            ath_date: maxDate,
+            atl_price: minPrice,
+            atl_date: minDate,
+            last_updated: new Date().toISOString()
+          }, {
+            onConflict: 'symbol'
+          });
+        
+        return {
+          ath: maxPrice,
+          athDate: maxDate,
+          atl: minPrice,
+          atlDate: minDate,
+          source: 'market_chart_max'
+        };
+      }
+    }
+  } catch (error) {
+    console.error(`  ❌ Fallback market_chart falhou para ${symbol}:`, error);
+  }
+  
+  // 4. ÚLTIMO RECURSO: dados do banco (sem inflação!)
+  const { data: dbData } = await supabase
+    .from('crypto_historical_prices')
+    .select('closing_price, date')
+    .eq('symbol', symbol)
+    .order('closing_price', { ascending: false });
+  
+  if (dbData && dbData.length > 0) {
+    const maxPrice = parseFloat(dbData[0].closing_price);
+    const maxDate = dbData[0].date;
+    const minData = dbData.sort((a: any, b: any) => parseFloat(a.closing_price) - parseFloat(b.closing_price))[0];
+    const minPrice = parseFloat(minData.closing_price);
+    const minDate = minData.date;
+    
+    console.log(`  ⚠️ ÚLTIMO RECURSO (DB): ATH=$${maxPrice} (${maxDate}), ATL=$${minPrice} (${minDate})`);
+    return {
+      ath: maxPrice,
+      athDate: maxDate,
+      atl: minPrice,
+      atlDate: minDate,
+      source: 'database'
+    };
+  }
+  
+  console.error(`  ❌ Nenhuma fonte de ATH/ATL para ${symbol}`);
+  return { ath: 0, athDate: null, atl: 0, atlDate: null, source: 'failed' };
 }
 
 // Função para buscar preços atuais (live) em batch do CoinGecko
@@ -586,16 +667,15 @@ Deno.serve(async (req) => {
 
         console.log(`  ✓ ${historicalPrices.length} dias de histórico de preços`);
 
-        // ========== BUSCAR ATH COM CACHE E RETRY ==========
+        // ========== BUSCAR ATH E ATL COM CACHE E RETRY ==========
         
-        let { ath: athPrice, athDate } = await fetchATHWithCache(supabase, crypto.coinId, crypto.symbol);
+        let { ath: athPrice, athDate, atl: atlPrice, atlDate, source: athSource } = await fetchATHWithCache(supabase, crypto.coinId, crypto.symbol);
         
-        // Se ATH ainda inválido, usar 2x o máximo histórico como último recurso
-        if (athPrice <= 0 || !athDate) {
-          console.log(`  ⚠️ ATH inválido para ${crypto.symbol}, usando fallback: 2x máximo histórico`);
-          const maxHistorical = Math.max(...historicalPrices.map(p => parseFloat(p.closing_price)));
-          athPrice = maxHistorical * 2;
-          athDate = historicalPrices[historicalPrices.findIndex(p => parseFloat(p.closing_price) === maxHistorical)]?.date || new Date().toISOString().split('T')[0];
+        // Validação: ATH e ATL devem ser válidos
+        if (athPrice <= 0 || !athDate || atlPrice <= 0 || !atlDate) {
+          validationErrors.push(`${crypto.symbol}: ATH/ATL inválidos (ATH=${athPrice}, ATL=${atlPrice})`);
+          console.error(`        ❌ ATH/ATL inválidos - PULANDO cripto`);
+          continue;
         }
 
         // ========== PRÉ-CHECAGEM 1: VALIDAR DADOS ==========
@@ -630,43 +710,18 @@ Deno.serve(async (req) => {
           console.error(`        ❌ Zeros detectados: preço=${precoAtual}, min=${minPreco}, max=${maxPreco365}`);
           continue;
         }
-        
-        // Validação: ATH deve ser válido
-        if (athPrice <= 0) {
-          validationErrors.push(`${crypto.symbol}: ATH inválido (${athPrice})`);
-          console.error(`        ❌ ATH inválido: ${athPrice}`);
+
+        // Validação de sanidade: ATH >= preço atual, ATL <= preço atual, ATL < ATH
+        if (athPrice < precoAtual || atlPrice > precoAtual || atlPrice >= athPrice) {
+          validationErrors.push(`${crypto.symbol}: Sanidade ATH/ATL falhou (ATH=${athPrice}, ATL=${atlPrice}, atual=${precoAtual})`);
+          console.error(`        ❌ Sanidade: ATH deve ser >= atual, ATL <= atual, ATL < ATH`);
           continue;
         }
 
-        // Validação: ATH deve ser >= máximo observado em 365d
-        let finalAthPrice = athPrice;
-        let finalAthDate = athDate;
-        
-        if (athPrice < maxPreco365) {
-          console.log(`  ⚠️ ATH do cache (${athPrice}) < máximo 365d (${maxPreco365}), ajustando...`);
-          finalAthPrice = maxPreco365 * 1.05; // 5% acima do máximo observado
-          finalAthDate = historicalPrices[historicalPrices.findIndex(p => parseFloat(p.closing_price) === maxPreco365)]?.date || athDate;
-          
-          // Atualizar cache com novo ATH
-          await supabase
-            .from('crypto_ath_cache')
-            .upsert({
-              symbol: crypto.symbol,
-              coin_id: crypto.coinId,
-              ath_price: finalAthPrice,
-              ath_date: finalAthDate,
-              last_updated: new Date().toISOString()
-            }, {
-              onConflict: 'symbol'
-            });
-          
-          console.log(`  ✓ ATH ajustado para: $${finalAthPrice.toFixed(6)} em ${finalAthDate}`);
-        }
-
         console.log(`        ✅ Preço atual: $${precoAtual.toFixed(6)}`);
-        console.log(`        ✅ Mín 365d: $${minPreco.toFixed(6)}`);
-        console.log(`        ✅ Máx 365d: $${maxPreco365.toFixed(6)}`);
-        console.log(`        ✅ ATH (histórico): $${finalAthPrice.toFixed(6)} em ${finalAthDate}`);
+        console.log(`        ✅ ATL (histórico): $${atlPrice.toFixed(8)} em ${atlDate}`);
+        console.log(`        ✅ ATH (histórico): $${athPrice.toFixed(2)} em ${athDate}`);
+        console.log(`        ✅ Fonte: ${athSource}`);
 
         // Calcular retornos logarítmicos diários
         const logReturns: number[] = [];
@@ -795,12 +850,14 @@ Deno.serve(async (req) => {
           percentage: probabilityPercentage,
           precoAtual,
           minPreco,
-          maxPreco: finalAthPrice,
+          maxPreco: athPrice,
           ic95Low,
           ic95High,
           nDias: historicalPrices.length,
-          athPrice: finalAthPrice,
-          athDate: finalAthDate
+          athPrice: athPrice,
+          athDate: athDate,
+          atlPrice: atlPrice,
+          atlDate: atlDate
         });
 
         // ========== SALVAR NO BANCO ==========
@@ -817,8 +874,10 @@ Deno.serve(async (req) => {
             final_probability: pAltaFinal,
             current_price: precoAtual,
             min_365d: minPreco,
-            max_ath: finalAthPrice,
-            ath_date: finalAthDate,
+            max_ath: athPrice,
+            ath_date: athDate,
+            min_atl: atlPrice,
+            atl_date: atlDate,
             mu_cripto: muCripto,
             sigma_cripto: sigmaCripto,
             ic_95_low: ic95Low,

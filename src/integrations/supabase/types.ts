@@ -149,6 +149,8 @@ export type Database = {
         Row: {
           ath_date: string
           ath_price: number
+          atl_date: string | null
+          atl_price: number | null
           coin_id: string
           created_at: string
           id: string
@@ -158,6 +160,8 @@ export type Database = {
         Insert: {
           ath_date: string
           ath_price: number
+          atl_date?: string | null
+          atl_price?: number | null
           coin_id: string
           created_at?: string
           id?: string
@@ -167,6 +171,8 @@ export type Database = {
         Update: {
           ath_date?: string
           ath_price?: number
+          atl_date?: string | null
+          atl_price?: number | null
           coin_id?: string
           created_at?: string
           id?: string
@@ -284,6 +290,7 @@ export type Database = {
         Row: {
           ath_cached_at: string | null
           ath_date: string | null
+          atl_date: string | null
           calculation_date: string
           coin_id: string
           created_at: string | null
@@ -296,6 +303,7 @@ export type Database = {
           market_cap_component: number
           max_ath: number | null
           min_365d: number | null
+          min_atl: number | null
           mu_cripto: number | null
           price_component: number
           probability_percentage: number
@@ -306,6 +314,7 @@ export type Database = {
         Insert: {
           ath_cached_at?: string | null
           ath_date?: string | null
+          atl_date?: string | null
           calculation_date?: string
           coin_id: string
           created_at?: string | null
@@ -318,6 +327,7 @@ export type Database = {
           market_cap_component: number
           max_ath?: number | null
           min_365d?: number | null
+          min_atl?: number | null
           mu_cripto?: number | null
           price_component: number
           probability_percentage: number
@@ -328,6 +338,7 @@ export type Database = {
         Update: {
           ath_cached_at?: string | null
           ath_date?: string | null
+          atl_date?: string | null
           calculation_date?: string
           coin_id?: string
           created_at?: string | null
@@ -340,6 +351,7 @@ export type Database = {
           market_cap_component?: number
           max_ath?: number | null
           min_365d?: number | null
+          min_atl?: number | null
           mu_cripto?: number | null
           price_component?: number
           probability_percentage?: number

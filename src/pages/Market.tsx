@@ -20,6 +20,10 @@ type Crypto = {
   confidence: number;
   rangeStatus?: 'ok' | 'review';
   dataStatus?: 'ok' | 'insufficient';
+  historicalATH?: number;
+  historicalATHDate?: string;
+  historicalATL?: number;
+  historicalATLDate?: string;
   debug?: {
     nPoints: number;
     mu: number;
@@ -230,6 +234,10 @@ const Market = () => {
           confidence: 95,
           dataStatus: 'ok',
           rangeStatus: 'ok',
+          historicalATH: prob.max_ath ? parseFloat(prob.max_ath) : undefined,
+          historicalATHDate: prob.ath_date || undefined,
+          historicalATL: prob.min_atl ? parseFloat(prob.min_atl) : undefined,
+          historicalATLDate: prob.atl_date || undefined,
           debug: {
             nPoints: 365,
             mu: 0,

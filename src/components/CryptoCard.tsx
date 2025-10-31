@@ -15,6 +15,10 @@ type CryptoCardProps = {
   confidence: number;
   rangeStatus?: 'ok' | 'review';
   dataStatus?: 'ok' | 'insufficient';
+  historicalATH?: number;
+  historicalATHDate?: string;
+  historicalATL?: number;
+  historicalATLDate?: string;
   debug?: any;
 };
 
@@ -31,6 +35,10 @@ export const CryptoCard = ({
   confidence,
   rangeStatus,
   dataStatus,
+  historicalATH,
+  historicalATHDate,
+  historicalATL,
+  historicalATLDate,
   debug,
 }: CryptoCardProps) => {
   return (
@@ -115,10 +123,49 @@ export const CryptoCard = ({
         </div>
       </div>
 
-      {/* Price Range */}
+      {/* Historical ATH/ATL */}
+      {historicalATH && historicalATL && (
+        <div className="space-y-2 pt-3 border-t border-primary/10">
+          <div className="text-xs text-muted-foreground font-medium mb-2">
+            Histórico
+          </div>
+          <div className="flex justify-between text-sm">
+            <div>
+              <div className="text-muted-foreground text-xs">ATL</div>
+              <div className="font-semibold text-red-400">
+                ${historicalATL < 0.01 
+                  ? historicalATL.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
+                  : historicalATL < 1
+                  ? historicalATL.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+                  : historicalATL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                }
+              </div>
+              {historicalATLDate && (
+                <div className="text-xs text-muted-foreground">{new Date(historicalATLDate).toLocaleDateString('pt-BR')}</div>
+              )}
+            </div>
+            <div className="text-right">
+              <div className="text-muted-foreground text-xs">ATH</div>
+              <div className="font-semibold text-green-400">
+                ${historicalATH < 0.01 
+                  ? historicalATH.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 })
+                  : historicalATH < 1
+                  ? historicalATH.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+                  : historicalATH.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                }
+              </div>
+              {historicalATHDate && (
+                <div className="text-xs text-muted-foreground">{new Date(historicalATHDate).toLocaleDateString('pt-BR')}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price Range (IC 95%) */}
       <div className="space-y-2 pt-3 border-t border-primary/10">
         <div className="text-xs text-muted-foreground font-medium mb-2">
-          Range de Preço (IC 95%)
+          Faixa (IC 95%)
         </div>
         {dataStatus === 'insufficient' ? (
           <div className="text-xs text-yellow-500">Sem faixa confiável (dados insuficientes)</div>
