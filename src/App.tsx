@@ -13,6 +13,7 @@ import Welcome5 from "./pages/Welcome5";
 import Chat from "./pages/Chat";
 import Dashboard from "./pages/Dashboard";
 import Market from "./pages/Market";
+import Community from "./pages/Community";
 import LanguageSelection from "./pages/LanguageSelection";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/chat" element={<Chat />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/market" element={<Market />} />
+            <Route path="/community" element={<Community />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
