@@ -340,12 +340,25 @@ const Chat = () => {
       })));
       scrollToBottom(false);
     } else {
-      // Initial message
+      // Verificar se é novo usuário ou usuário retornando
+      const userIsNew = await isNewUser(uid);
+      
+      let welcomeContent: string;
+      
+      if (userIsNew) {
+        // Mensagem para NOVO usuário
+        welcomeContent = "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte.";
+      } else {
+        // Mensagem para USUÁRIO RETORNANDO
+        welcomeContent = "Seja bem-vindo de volta, é bom saber que está dedicado com seu progresso e evolução, vamos continuar de onde paramos?";
+      }
+      
       const initialMessage: Message = {
         id: 1,
         role: "assistant",
-        content: "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte."
+        content: welcomeContent
       };
+      
       setMessages([initialMessage]);
       scrollToBottom(false);
       
@@ -358,6 +371,23 @@ const Chat = () => {
         });
       }
     }
+  };
+
+  const isNewUser = async (uid: string): Promise<boolean> => {
+    // Verificar se existe QUALQUER mensagem do usuário no sistema
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('user_id', uid)
+      .limit(1);
+    
+    if (error) {
+      console.error('Error checking user history:', error);
+      return false; // Em caso de erro, assume que não é novo
+    }
+    
+    // Se não tem nenhuma mensagem, é novo usuário
+    return !data || data.length === 0;
   };
 
   const handleSelectLesson = async (lessonId: string) => {
