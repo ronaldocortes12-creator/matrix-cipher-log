@@ -78,6 +78,9 @@ const Market = () => {
         { id: 'near', symbol: 'NEAR', name: 'NEAR Protocol', logo: 'https://assets.coingecko.com/coins/images/10365/small/near.jpg' },
         { id: 'fetch-ai', symbol: 'FET', name: 'Fetch.ai', logo: 'https://assets.coingecko.com/coins/images/5681/small/Fetch.jpg' },
         { id: 'sui', symbol: 'SUI', name: 'Sui', logo: 'https://assets.coingecko.com/coins/images/26375/small/sui_asset.jpeg' },
+        { id: 'worldcoin-wld', symbol: 'WLD', name: 'Worldcoin', logo: 'https://assets.coingecko.com/coins/images/31069/small/worldcoin.jpeg' },
+        { id: 'stellar', symbol: 'XLM', name: 'Stellar', logo: 'https://assets.coingecko.com/coins/images/100/small/Stellar_symbol_black_RGB.png' },
+        { id: 'dogwifcoin', symbol: 'WIF', name: 'dogwifhat', logo: 'https://assets.coingecko.com/coins/images/33566/small/dogwifhat.jpg' },
       ];
 
       // Buscar probabilidades calculadas do banco (preferir últimas 24h)
