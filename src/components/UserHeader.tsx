@@ -150,38 +150,45 @@ export const UserHeader = () => {
 
   return (
     <>
-      <div className="p-4 border-b border-primary/20 bg-card/30 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setShowProfileDialog(true)}
-            className="relative group"
-          >
-            <Avatar className="h-12 w-12 ring-2 ring-primary/30 group-hover:ring-primary/60 transition-all">
-              <AvatarImage src={avatarUrl || undefined} />
-              <AvatarFallback className="bg-primary/20 text-primary">
-                {profile?.full_name ? getInitials(profile.full_name) : <User className="h-5 w-5" />}
-              </AvatarFallback>
-            </Avatar>
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-full flex items-center justify-center">
-              <Edit className="h-4 w-4 text-white" />
+      <div className="border-b border-primary/20 bg-card/30 backdrop-blur-xl">
+        {/* User Info */}
+        <div className="p-4 pb-3">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowProfileDialog(true)}
+              className="relative group"
+            >
+              <Avatar className="h-12 w-12 ring-2 ring-primary/30 group-hover:ring-primary/60 transition-all">
+                <AvatarImage src={avatarUrl || undefined} />
+                <AvatarFallback className="bg-primary/20 text-primary">
+                  {profile?.full_name ? getInitials(profile.full_name) : <User className="h-5 w-5" />}
+                </AvatarFallback>
+              </Avatar>
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-full flex items-center justify-center">
+                <Edit className="h-4 w-4 text-white" />
+              </div>
+            </button>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {profile?.full_name || 'Usuário'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {profile?.crypto_experience || 'Iniciante'}
+              </p>
             </div>
-          </button>
-
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground truncate">
-              {profile?.full_name || 'Usuário'}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {profile?.crypto_experience || 'Iniciante'}
-            </p>
           </div>
+        </div>
 
+        {/* Logout Button */}
+        <div className="px-4 pb-3">
           <button
             onClick={handleLogout}
-            className="p-2 hover:bg-destructive/20 rounded-lg transition-colors"
+            className="w-full p-2 hover:bg-destructive/10 rounded-lg transition-colors flex items-center justify-center gap-2 text-muted-foreground hover:text-destructive"
             title="Sair"
           >
-            <LogOut className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+            <LogOut className="h-4 w-4" />
+            <span className="text-xs font-medium">Sair</span>
           </button>
         </div>
       </div>
