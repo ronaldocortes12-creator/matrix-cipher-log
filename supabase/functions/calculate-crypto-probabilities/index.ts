@@ -443,9 +443,9 @@ Deno.serve(async (req) => {
         const n10 = mcap10dLogReturns.length;
         z10 = (mu10 / (sigma10 + EPSILON)) * Math.sqrt(n10);
         
-        // INVERSÃO: sigmoid(SLOPE * z) → z negativo (saída) → exp(negativo) grande → alta probabilidade
+        // Lógica correta: Entrada de dinheiro (z > 0) → P(alta) maior
         const S10 = 1.8;
-        p10 = 1 / (1 + Math.exp(S10 * z10)); // Sem dupla negação: z<0 (saída) → alta prob
+        p10 = 1 / (1 + Math.exp(-S10 * z10));
         
         // Reforço por ΔUSD absoluto
         const THRESHOLD_10D_USD = 100e9; // 100 bilhões
@@ -455,7 +455,7 @@ Deno.serve(async (req) => {
         if (Math.abs(delta10USD) >= THRESHOLD_10D_USD) {
           const deltaLogit = (delta10USD / NORM_10) * GAMMA_10;
           const logit10 = Math.log(p10 / (1 - p10 + EPSILON));
-          const logit10Reinforced = logit10 - deltaLogit; // -delta porque entrada → queda
+          const logit10Reinforced = logit10 + deltaLogit;
           p10 = 1 / (1 + Math.exp(-logit10Reinforced));
           console.log(`  🔥 Reforço 10d aplicado: ΔUSD=${(delta10USD/1e9).toFixed(2)}B → shift=${deltaLogit.toFixed(4)}`);
         }
@@ -464,13 +464,13 @@ Deno.serve(async (req) => {
         p10 = Math.min(0.95, Math.max(0.05, p10));
         
         const variacao10d = (delta10USD / mcapInicial10d) * 100;
-        const flowType = delta10USD < 0 ? 'OUTFLOW (→ ALTA)' : 'INFLOW (→ QUEDA)';
+        const flowType = delta10USD >= 0 ? 'INFLOW (→ ALTA)' : 'OUTFLOW (→ QUEDA)';
         
         console.log(`  📊 Market Cap inicial (10d): $${(mcapInicial10d / 1e12).toFixed(2)}T`);
         console.log(`  📊 Market Cap final (hoje): $${(mcapFinal10d / 1e12).toFixed(2)}T`);
         console.log(`  📊 Δ10_USD = ${delta10USD >= 0 ? '+' : ''}$${(delta10USD / 1e9).toFixed(2)}B (${flowType})`);
         console.log(`  📊 Δ10_% = ${variacao10d >= 0 ? '+' : ''}${variacao10d.toFixed(2)}%`);
-        console.log(`  📈 z10 = ${z10.toFixed(4)}, p10 = ${(p10 * 100).toFixed(2)}% (invertido)`);
+        console.log(`  📈 z10 = ${z10.toFixed(4)}, p10 = ${(p10 * 100).toFixed(2)}%`);
       } else {
         console.log(`  ⚠️ Retornos insuficientes (${mcap10dLogReturns.length}/8), usando neutro (50%)`);
       }
@@ -479,7 +479,6 @@ Deno.serve(async (req) => {
     }
 
     // ========== PRÉ-CÁLCULO 2: COMPONENTE DE TOTAL CRYPTO MARKET CAP 40 DIAS (peso 0.20 dentro dos 55%) ==========
-    // INVERSÃO: Saída de dinheiro → ALTA, Entrada forte de dinheiro → QUEDA
     
     console.log('\n💰 Calculando componente de Total Crypto Market Cap 40 dias (peso 0.20 dentro dos 55%)...');
     
@@ -522,9 +521,9 @@ Deno.serve(async (req) => {
         const n40 = mcap40dLogReturns.length;
         z40 = (mu40 / (sigma40 + EPSILON)) * Math.sqrt(n40);
         
-        // INVERSÃO: sigmoid(SLOPE * z) → z negativo (saída) → exp(negativo) grande → alta probabilidade
+        // Lógica correta: Entrada de dinheiro (z > 0) → P(alta) maior
         const S40 = 1.4;
-        p40 = 1 / (1 + Math.exp(S40 * z40)); // Sem dupla negação: z<0 (saída) → alta prob
+        p40 = 1 / (1 + Math.exp(-S40 * z40));
         
         // Reforço por ΔUSD absoluto
         const THRESHOLD_40D_USD = 200e9; // 200 bilhões
@@ -534,7 +533,7 @@ Deno.serve(async (req) => {
         if (Math.abs(delta40USD) >= THRESHOLD_40D_USD) {
           const deltaLogit = (delta40USD / NORM_40) * GAMMA_40;
           const logit40 = Math.log(p40 / (1 - p40 + EPSILON));
-          const logit40Reinforced = logit40 - deltaLogit;
+          const logit40Reinforced = logit40 + deltaLogit;
           p40 = 1 / (1 + Math.exp(-logit40Reinforced));
           console.log(`  🔥 Reforço 40d aplicado: ΔUSD=${(delta40USD/1e9).toFixed(2)}B → shift=${deltaLogit.toFixed(4)}`);
         }
@@ -542,13 +541,13 @@ Deno.serve(async (req) => {
         p40 = Math.min(0.95, Math.max(0.05, p40));
         
         const variacao40d = (delta40USD / mcapInicial40d) * 100;
-        const flowType = delta40USD < 0 ? 'OUTFLOW (→ ALTA)' : 'INFLOW (→ QUEDA)';
+        const flowType = delta40USD >= 0 ? 'INFLOW (→ ALTA)' : 'OUTFLOW (→ QUEDA)';
         
         console.log(`  📊 Market Cap inicial (40d): $${(mcapInicial40d / 1e12).toFixed(2)}T`);
         console.log(`  📊 Market Cap final (hoje): $${(mcapFinal40d / 1e12).toFixed(2)}T`);
         console.log(`  📊 Δ40_USD = ${delta40USD >= 0 ? '+' : ''}$${(delta40USD / 1e9).toFixed(2)}B (${flowType})`);
         console.log(`  📊 Δ40_% = ${variacao40d >= 0 ? '+' : ''}${variacao40d.toFixed(2)}%`);
-        console.log(`  📈 z40 = ${z40.toFixed(4)}, p40 = ${(p40 * 100).toFixed(2)}% (invertido)`);
+        console.log(`  📈 z40 = ${z40.toFixed(4)}, p40 = ${(p40 * 100).toFixed(2)}%`);
       } else {
         console.log(`  ⚠️ Retornos insuficientes (${mcap40dLogReturns.length}/30), usando neutro (50%)`);
       }
@@ -1044,10 +1043,10 @@ Deno.serve(async (req) => {
     console.log(`\n💰 COMPONENTE MARKET CAP (55% TOTAL = 0.35×10d + 0.20×40d):`);
     console.log(`   ┌─ 10 dias (peso 0.35):`);
     console.log(`   │  Δ10_USD = ${delta10USD >= 0 ? '+' : ''}$${(delta10USD / 1e9).toFixed(2)}B`);
-    console.log(`   │  z10 = ${z10.toFixed(4)}, p10 = ${(p10 * 100).toFixed(2)}% (INVERTIDO)`);
+    console.log(`   │  z10 = ${z10.toFixed(4)}, p10 = ${(p10 * 100).toFixed(2)}%`);
     console.log(`   ┌─ 40 dias (peso 0.20):`);
     console.log(`   │  Δ40_USD = ${delta40USD >= 0 ? '+' : ''}$${(delta40USD / 1e9).toFixed(2)}B`);
-    console.log(`   │  z40 = ${z40.toFixed(4)}, p40 = ${(p40 * 100).toFixed(2)}% (INVERTIDO)`);
+    console.log(`   │  z40 = ${z40.toFixed(4)}, p40 = ${(p40 * 100).toFixed(2)}%`);
     console.log(`   └─ Combinado: p_mcap = ${(pMcapFinal * 100).toFixed(2)}%`);
     
     console.log(`\n₿ COMPONENTE BTC 10 DIAS (25%):`);
@@ -1072,7 +1071,7 @@ Deno.serve(async (req) => {
     });
     
     console.log(`\n✅ VALIDAÇÃO:`);
-    console.log(`   [${pMcapFinal !== 0.5 ? '✓' : '✗'}] Componente 55% usa Market Cap 10d+40d invertido`);
+    console.log(`   [${pMcapFinal !== 0.5 ? '✓' : '✗'}] Componente 55% usa Market Cap 10d+40d`);
     console.log(`   [${pAltaBTC10d !== 0.5 ? '✓' : '✗'}] Componente 25% usa BTC 10 dias`);
     console.log(`   [${successCount > 0 ? '✓' : '✗'}] Pelo menos 1 cripto foi calculada`);
     console.log(`   [${allValidationsPassed ? '✓' : '✗'}] Todas as checagens lógicas OK`);
