@@ -49,7 +49,7 @@ interface ShadowCalc {
   sigma: number;
   p_alta_preco: number;
   p_alta_total_mcap_10d: number;
-  p_alta_global365d: number;
+  p_alta_btc: number;
   p_final: number;
   direction: 'alta' | 'queda';
   percentage: number;
@@ -301,69 +301,63 @@ Deno.serve(async (req) => {
       console.log(`  ⚠️ Dados de 10 dias insuficientes (${globalMcap10d?.length || 0}/11), usando neutro (50%)`);
     }
 
-    // ========== PRÉ-CÁLCULO 2: COMPONENTE GLOBAL DE MARKET CAP 365d (20%) ==========
-    // Componente baseado em baseline histórico de 365 dias
+    // ========== PRÉ-CÁLCULO 2: COMPONENTE MOVIMENTO DO BITCOIN (25%) ==========
+    // Componente baseado na tendência de 10 dias do preço do Bitcoin
     
-    console.log('\n🌍 Calculando componente global de market cap 365d (20%)...');
+    console.log('\n₿ Calculando componente de movimento do Bitcoin 10 dias (25%)...');
     
-    // Buscar últimos 7 dias do Total Market Cap global
-    const { data: globalMcap7d, error: mcap7dError } = await supabase
-      .from('global_crypto_market_cap')
-      .select('date, total_market_cap, daily_change_pct')
+    let pAltaBTC10d = 0.5; // neutro se não houver dados
+    let btc10dLogReturns: number[] = [];
+    let btc10dZScore = 0;
+
+    // Buscar últimos 11 dias de preços do BTC (para 10 retornos)
+    const { data: btcPrice10d, error: btc10dError } = await supabase
+      .from('crypto_historical_prices')
+      .select('date, closing_price')
+      .eq('symbol', 'BTC')
       .order('date', { ascending: false })
-      .limit(7);
+      .limit(11);
 
-    // Buscar últimos 365 dias para baseline
-    const { data: globalMcap365d, error: mcap365dError } = await supabase
-      .from('global_crypto_market_cap')
-      .select('date, total_market_cap, daily_change_pct')
-      .order('date', { ascending: false })
-      .limit(365);
-
-    let pAltaGlobal365d = 0.5; // Default neutro se não houver dados
-    let zGlobal = 0;
-    let deltaCapAvg7d = 0;
-    let deltaMean365 = 0;
-    let deltaStd365 = 0;
-
-    if (!mcap7dError && !mcap365dError && globalMcap7d && globalMcap365d && 
-        globalMcap7d.length >= 2 && globalMcap365d.length >= 30) {
-      
-      console.log(`  ✓ ${globalMcap7d.length} dias recentes, ${globalMcap365d.length} dias baseline`);
-      
-      // Calcular variação percentual média dos últimos 7 dias
-      const changes7d = globalMcap7d
-        .filter(d => d.daily_change_pct !== null)
-        .map(d => parseFloat(d.daily_change_pct as string));
-      
-      if (changes7d.length > 0) {
-        deltaCapAvg7d = mean(changes7d);
-        console.log(`  Δ_cap,7d = ${deltaCapAvg7d.toFixed(4)}%`);
-      }
-      
-      // Calcular baseline de 365 dias (média e desvio padrão)
-      const changes365d = globalMcap365d
-        .filter(d => d.daily_change_pct !== null)
-        .map(d => parseFloat(d.daily_change_pct as string));
-      
-      if (changes365d.length > 0) {
-        deltaMean365 = mean(changes365d);
-        deltaStd365 = standardDeviation(changes365d);
-        
-        console.log(`  Δ̄_365 = ${deltaMean365.toFixed(4)}%, s_Δ,365 = ${deltaStd365.toFixed(4)}%`);
-        
-        // Calcular z-score global
-        zGlobal = (deltaCapAvg7d - deltaMean365) / (deltaStd365 + EPSILON);
-        
-        // Converter z-score em probabilidade (sigmoide)
-        pAltaGlobal365d = 1 / (1 + Math.exp(-zGlobal));
-        
-        console.log(`  z_global = ${zGlobal.toFixed(4)}`);
-        console.log(`  🌍 P(alta|global_365d) = ${(pAltaGlobal365d * 100).toFixed(2)}%`);
-        console.log(`  ✅ Componente global 365d: MESMO para TODAS as criptos`);
+    if (!btc10dError && btcPrice10d && btcPrice10d.length >= 11) {
+      console.log(`  ✓ ${btcPrice10d.length} dias de BTC disponíveis`);
+      const sortedBtc = [...btcPrice10d].reverse();
+      for (let i = 1; i < sortedBtc.length; i++) {
+        const prev = parseFloat(sortedBtc[i - 1].closing_price as string);
+        const curr = parseFloat(sortedBtc[i].closing_price as string);
+        if (prev > 0 && curr > 0) {
+          btc10dLogReturns.push(Math.log(curr / prev));
+        }
       }
     } else {
-      console.log(`  ⚠️ Dados globais 365d insuficientes, usando neutro (50%)`);
+      console.log('  ⚠️ Dados insuficientes no banco para BTC 10d, usando fallback...');
+      const fallback = await fetchFallbackData('bitcoin', 'BTC');
+      const prices = (fallback.prices || []).slice(-11);
+      if (prices.length >= 11) {
+        for (let i = 1; i < prices.length; i++) {
+          const prev = prices[i - 1][1];
+          const curr = prices[i][1];
+          if (prev > 0 && curr > 0) btc10dLogReturns.push(Math.log(curr / prev));
+        }
+      }
+    }
+
+    if (btc10dLogReturns.length >= 8) {
+      const muBtc10d = mean(btc10dLogReturns);
+      const sigmaBtc10d = standardDeviation(btc10dLogReturns);
+      const nBtc = btc10dLogReturns.length;
+      btc10dZScore = (muBtc10d / (sigmaBtc10d + EPSILON)) * Math.sqrt(nBtc);
+
+      const SLOPE_BTC_10D = 1.6;
+      pAltaBTC10d = 1 / (1 + Math.exp(-SLOPE_BTC_10D * btc10dZScore));
+      pAltaBTC10d = Math.min(0.9, Math.max(0.1, pAltaBTC10d));
+
+      console.log(`  📈 BTC n (10d) = ${nBtc}`);
+      console.log(`  📈 BTC μ (10d) = ${muBtc10d.toFixed(6)}, σ (10d) = ${sigmaBtc10d.toFixed(6)}`);
+      console.log(`  📈 BTC z-score (10d) = ${btc10dZScore.toFixed(4)} (slope=${SLOPE_BTC_10D})`);
+      console.log(`  💎 P(alta|BTC_10d) = ${(pAltaBTC10d * 100).toFixed(2)}%`);
+      console.log(`  ✅ Componente BTC 10d (25%): MESMO para TODAS as criptos`);
+    } else {
+      console.log(`  ⚠️ Retornos BTC insuficientes (${btc10dLogReturns.length}/8), usando neutro (50%)`);
     }
 
     for (const crypto of CRYPTOS) {
@@ -500,18 +494,23 @@ Deno.serve(async (req) => {
         console.log(`     μ_cripto = ${muCripto.toFixed(6)}`);
         console.log(`     σ_cripto = ${sigmaCripto.toFixed(6)}`);
 
-        // Calcular probabilidade de QUEDA baseada em preço (distribuição normal)
-        // P(queda|preço) = Φ((0 - μ_cripto) / (σ_cripto + ε))
-        const zScorePreco = (0 - muCripto) / (sigmaCripto + EPSILON);
-        const pQuedaPreco = normalCDF(zScorePreco);
-        const pAltaPreco = 1 - pQuedaPreco;
+        // ========== NOVO COMPONENTE 20%: VOLATILIDADE + PREÇO ATUAL ==========
+        // Usar distribuição de log-preços (μ_log, σ_log) e posição do preço atual
+        const logPrices = prices.map(p => Math.log(p));
+        const muLogPrice = mean(logPrices);
+        const sigmaLogPrice = standardDeviation(logPrices);
+        const zPrice = (Math.log(precoAtual) - muLogPrice) / (sigmaLogPrice + EPSILON);
+        // Sigmoide com leve sensibilidade; clamp para evitar 50% cluster
+        const SLOPE_PRICE = 1.2;
+        const pAltaPreco = Math.min(0.95, Math.max(0.05, 1 / (1 + Math.exp(-SLOPE_PRICE * zPrice))));
 
-        // Calcular IC 95% (recomendado para tooltip)
-        const ic95Low = muCripto - 1.96 * sigmaCripto;
-        const ic95High = muCripto + 1.96 * sigmaCripto;
+        // Calcular IC 95% em log-preço para logging
+        const ic95Low = muLogPrice - 1.96 * sigmaLogPrice;
+        const ic95High = muLogPrice + 1.96 * sigmaLogPrice;
 
-        console.log(`     IC_95% = [${ic95Low.toFixed(6)}, ${ic95High.toFixed(6)}]`);
-        console.log(`     P(alta|preço) = ${(pAltaPreco * 100).toFixed(2)}%`);
+        console.log(`     IC_95%(log preço) = [${ic95Low.toFixed(6)}, ${ic95High.toFixed(6)}]`);
+        console.log(`     z_preço = ${zPrice.toFixed(6)} (slope=${SLOPE_PRICE})`);
+        console.log(`     P(alta|preço_vol) = ${(pAltaPreco * 100).toFixed(2)}%`);
 
         // ========== ETAPA 2: COMPONENTE GLOBAL DE MARKET CAP 365d (20%) ==========
         // Usar o componente global 365d calculado (MESMO para todas as criptos)
