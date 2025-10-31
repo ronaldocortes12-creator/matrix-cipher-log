@@ -329,9 +329,9 @@ Deno.serve(async (req) => {
         const n10 = mcap10dLogReturns.length;
         z10 = (mu10 / (sigma10 + EPSILON)) * Math.sqrt(n10);
         
-        // INVERSÃO: sigmoid(-SLOPE * z) → saída = z negativo → sigmoid positivo → alta
+        // INVERSÃO: sigmoid(SLOPE * z) → z negativo (saída) → exp(negativo) grande → alta probabilidade
         const S10 = 1.8;
-        p10 = 1 / (1 + Math.exp(-(-S10 * z10))); // Nota: -S10 * z10 para inverter
+        p10 = 1 / (1 + Math.exp(S10 * z10)); // Sem dupla negação: z<0 (saída) → alta prob
         
         // Reforço por ΔUSD absoluto
         const THRESHOLD_10D_USD = 100e9; // 100 bilhões
@@ -408,9 +408,9 @@ Deno.serve(async (req) => {
         const n40 = mcap40dLogReturns.length;
         z40 = (mu40 / (sigma40 + EPSILON)) * Math.sqrt(n40);
         
-        // INVERSÃO: sigmoid(-SLOPE * z)
+        // INVERSÃO: sigmoid(SLOPE * z) → z negativo (saída) → exp(negativo) grande → alta probabilidade
         const S40 = 1.4;
-        p40 = 1 / (1 + Math.exp(-(-S40 * z40))); // -S40 * z40 para inverter
+        p40 = 1 / (1 + Math.exp(S40 * z40)); // Sem dupla negação: z<0 (saída) → alta prob
         
         // Reforço por ΔUSD absoluto
         const THRESHOLD_40D_USD = 200e9; // 200 bilhões
