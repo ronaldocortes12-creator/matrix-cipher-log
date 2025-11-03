@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.74.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,13 +9,79 @@ const corsHeaders = {
 
 const MEMECOINS = ['DOGE', 'SHIB', 'WIF'];
 
+// Rate limiting helper
+async function checkRateLimit(supabase: any, ip: string): Promise<{ allowed: boolean }> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - 60 * 1000);
+  const maxRequests = 10;
+  
+  try {
+    const { data: limits } = await supabase
+      .from('api_rate_limits')
+      .select('request_count')
+      .eq('ip_address', ip)
+      .eq('endpoint', 'crypto-info')
+      .gte('window_start', windowStart.toISOString())
+      .maybeSingle();
+    
+    if (!limits) {
+      await supabase.from('api_rate_limits').insert({
+        ip_address: ip,
+        endpoint: 'crypto-info',
+        request_count: 1,
+        window_start: now.toISOString()
+      });
+      return { allowed: true };
+    }
+    
+    if (limits.request_count >= maxRequests) {
+      return { allowed: false };
+    }
+    
+    await supabase
+      .from('api_rate_limits')
+      .update({ request_count: limits.request_count + 1 })
+      .eq('ip_address', ip)
+      .eq('endpoint', 'crypto-info');
+    
+    return { allowed: true };
+  } catch (error) {
+    console.error('Rate limit error:', error);
+    return { allowed: true };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const requestId = crypto.randomUUID().substring(0, 8);
+  const startTime = Date.now();
+
   try {
+    // Rate limiting
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    
+    const clientIp = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown';
+    const rateLimit = await checkRateLimit(supabase, clientIp);
+    
+    if (!rateLimit.allowed) {
+      console.warn(`[${requestId}] Rate limit excedido para IP ${clientIp}`);
+      return new Response(
+        JSON.stringify({ error: 'Muitas requisições. Aguarde um momento e tente novamente.' }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 429 
+        }
+      );
+    }
+    
     const { symbol, name } = await req.json();
+    console.log(`[${requestId}] Buscando info para ${symbol} (${name})`);
     
     if (!symbol || !name) {
       return new Response(

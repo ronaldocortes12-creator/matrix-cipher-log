@@ -1,18 +1,106 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.74.0';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Rate limiting helper
+async function checkRateLimit(supabase: any, userId: string): Promise<{ allowed: boolean; remaining: number }> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - 60 * 1000);
+  const maxRequests = 30;
+  
+  try {
+    const { data: limits } = await supabase
+      .from('api_rate_limits')
+      .select('request_count, window_start')
+      .eq('ip_address', userId)
+      .eq('endpoint', 'chat')
+      .gte('window_start', windowStart.toISOString())
+      .maybeSingle();
+    
+    if (!limits) {
+      await supabase.from('api_rate_limits').insert({
+        ip_address: userId,
+        endpoint: 'chat',
+        request_count: 1,
+        window_start: now.toISOString()
+      });
+      return { allowed: true, remaining: maxRequests - 1 };
+    }
+    
+    if (limits.request_count >= maxRequests) {
+      return { allowed: false, remaining: 0 };
+    }
+    
+    await supabase
+      .from('api_rate_limits')
+      .update({ request_count: limits.request_count + 1 })
+      .eq('ip_address', userId)
+      .eq('endpoint', 'chat')
+      .eq('window_start', limits.window_start);
+    
+    return { allowed: true, remaining: maxRequests - limits.request_count - 1 };
+  } catch (error) {
+    console.error('Rate limit check error:', error);
+    return { allowed: true, remaining: maxRequests };
+  }
+}
+
+// Error logging helper
+async function logError(supabase: any, requestId: string, error: any, userId?: string) {
+  try {
+    await supabase.from('error_logs').insert({
+      function_name: 'chat',
+      error_type: error.name || 'UnknownError',
+      error_message: error.message || String(error),
+      stack_trace: error.stack,
+      request_id: requestId,
+      user_id: userId,
+      metadata: { timestamp: new Date().toISOString() }
+    });
+  } catch (e) {
+    console.error('Failed to log error:', e);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const requestId = crypto.randomUUID().substring(0, 8);
+  const startTime = Date.now();
   console.log(`[${requestId}] Nova requisição recebida`);
 
   try {
     const { messages, userId, language = 'pt' } = await req.json();
+    console.log(`[${requestId}] User ID: ${userId}, Mensagens: ${messages?.length || 0}, Idioma: ${language}`);
+    
+    // Criar cliente Supabase para rate limiting
+    const authHeader = req.headers.get('authorization');
+    if (authHeader) {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const rateLimit = await checkRateLimit(supabase, user.id);
+        if (!rateLimit.allowed) {
+          console.warn(`[${requestId}] Rate limit excedido para usuário ${user.id}`);
+          return new Response(JSON.stringify({ 
+            error: "Você está enviando mensagens muito rápido. Aguarde um momento.",
+            remaining: 0
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-RateLimit-Remaining': '0' }
+          });
+        }
+      }
+    }
     console.log(`[${requestId}] User ID: ${userId}, Mensagens: ${messages?.length || 0}, Idioma: ${language}`);
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -432,8 +520,27 @@ Recuerda: Estás formando traders disciplinados que vivirán del cripto. Cada in
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error(`[${requestId}] Erro crítico:`, e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
+    const executionTime = Date.now() - startTime;
+    console.error(`[${requestId}] Erro crítico após ${executionTime}ms:`, e);
+    
+    // Log error para análise posterior
+    try {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader) {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+        await logError(supabase, requestId, e);
+      }
+    } catch (logErr) {
+      console.error('Failed to log error:', logErr);
+    }
+    
+    return new Response(JSON.stringify({ 
+      error: e instanceof Error ? e.message : "Erro desconhecido",
+      request_id: requestId
+    }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
