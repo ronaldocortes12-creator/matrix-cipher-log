@@ -170,10 +170,9 @@ const Chat = () => {
       }
 
       setUserId(session.user.id);
-      await Promise.all([
-        loadLessons(session.user.id),
-        loadChatHistory(session.user.id)
-      ]);
+      // Executar sequencialmente para garantir que activeLessonId esteja definido
+      await loadLessons(session.user.id);
+      await loadChatHistory(session.user.id);
     } catch (error) {
       console.error('Error initializing chat:', error);
     } finally {
@@ -304,8 +303,6 @@ const Chat = () => {
   };
 
   const loadChatHistory = async (uid: string) => {
-    const activeLesson = lessons.find(l => l.id === activeLessonId);
-    
     // Verificar se aula atual já foi autorizada para conclusão
     if (activeLessonId) {
       const { data: lessonData } = await supabase
@@ -342,18 +339,8 @@ const Chat = () => {
       })));
       scrollToBottom(false);
     } else {
-      // Verificar se é novo usuário ou usuário retornando
-      const userIsNew = await isNewUser(uid);
-      
-      let welcomeContent: string;
-      
-      if (userIsNew) {
-        // Mensagem para NOVO usuário
-        welcomeContent = t('chat.welcomeNew');
-      } else {
-        // Mensagem para USUÁRIO RETORNANDO
-        welcomeContent = t('chat.welcomeBack');
-      }
+      // SEMPRE usar mensagem de retorno
+      const welcomeContent = t('chat.welcomeBack');
       
       const initialMessage: Message = {
         id: 1,

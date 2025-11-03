@@ -28,7 +28,7 @@ export const translations = {
     },
     chat: {
       welcomeNew: "Seja bem-vindo! Serei seu professor nesses próximos dias e vou garantir que você aprenda tudo e consiga operar e lucrar consistentemente no mercado que mais cresce no mundo.\n\nNosso treinamento será por aqui, e começamos com o básico sobre cripto. Me diga se você já entende o básico - caso já saiba, podemos pular a primeira parte.",
-      welcomeBack: "É bom te ver de volta, operadores lucrativos se fazem na consistência. Podemos seguir de onde paramos?",
+      welcomeBack: "Que bom que você voltou, bora continuar aprendendo ou vai enrolar?",
       placeholder: "Digite sua mensagem...",
       completeDay: "Concluir Dia",
       saveError: "Erro ao salvar mensagem",
