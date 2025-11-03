@@ -302,13 +302,16 @@ const Chat = () => {
     }
   };
 
-  const loadChatHistory = async (uid: string) => {
+  const loadChatHistory = async (uid: string, lessonId?: string) => {
+    // Usar lessonId passado como parâmetro OU fallback para activeLessonId do estado
+    const targetLessonId = lessonId || activeLessonId;
+    
     // Verificar se aula atual já foi autorizada para conclusão
-    if (activeLessonId) {
+    if (targetLessonId) {
       const { data: lessonData } = await supabase
         .from('lessons')
         .select('can_complete')
-        .eq('id', activeLessonId)
+        .eq('id', targetLessonId)
         .single();
       
       setCanCompleteLesson(lessonData?.can_complete || false);
@@ -320,8 +323,8 @@ const Chat = () => {
       .eq('user_id', uid)
       .order('created_at', { ascending: true });
 
-    if (activeLessonId) {
-      query.eq('lesson_id', activeLessonId);
+    if (targetLessonId) {
+      query.eq('lesson_id', targetLessonId);
     }
 
     const { data, error } = await query;
@@ -351,10 +354,10 @@ const Chat = () => {
       setMessages([initialMessage]);
       scrollToBottom(false);
       
-      if (uid && activeLessonId) {
+      if (uid && targetLessonId) {
         await supabase.from('chat_messages').insert({
           user_id: uid,
-          lesson_id: activeLessonId,
+          lesson_id: targetLessonId,
           role: 'assistant',
           content: initialMessage.content
         });
@@ -388,7 +391,8 @@ const Chat = () => {
     setIsInitialLoad(true);
     
     if (userId) {
-      await loadChatHistory(userId);
+      // Passar lessonId diretamente para evitar race condition do estado
+      await loadChatHistory(userId, lessonId);
     }
     
     setIsLoadingHistory(false);
