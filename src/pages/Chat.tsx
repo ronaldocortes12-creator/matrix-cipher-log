@@ -400,7 +400,7 @@ const Chat = () => {
     setIsLoadingHistory(false);
   };
 
-  const handleSendInternal = async () => {
+  const handleSend = async () => {
     if (!input.trim() || isSending || isLoadingHistory || !userId || !activeLessonId) return;
 
     const userMessage: Message = {
@@ -654,9 +654,6 @@ const Chat = () => {
       setIsSending(false);
     }
   };
-  
-  // Debounced version to prevent spam
-  const handleSend = useDebouncedCallback(handleSendInternal, 500);
 
   if (isLoading) {
     return (
