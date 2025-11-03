@@ -1,8 +1,5 @@
 project_id = "ddmimmbnuvcqlndkawar"
 
-[functions.admin-create-users]
-verify_jwt = false
-
 [functions.update-crypto-data]
 verify_jwt = false
 
@@ -16,4 +13,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.crypto-info]
+verify_jwt = false
+
+[functions.system-health]
+verify_jwt = false
+
+[functions.chat]
+verify_jwt = true
+
+[functions.create-user]
 verify_jwt = false
