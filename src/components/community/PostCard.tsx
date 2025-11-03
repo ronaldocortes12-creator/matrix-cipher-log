@@ -25,6 +25,7 @@ type Post = {
   id: string;
   user_id: string;
   content: string;
+  image_url?: string;
   likes_count: number;
   comments_count: number;
   created_at: string;
@@ -152,6 +153,15 @@ export const PostCard = ({
 
       {/* Conteúdo */}
       <p className="mb-4 whitespace-pre-wrap text-foreground">{post.content}</p>
+      
+      {/* Imagem se houver */}
+      {post.image_url && (
+        <img 
+          src={post.image_url} 
+          alt="Post" 
+          className="mb-4 rounded-lg max-h-96 w-full object-cover"
+        />
+      )}
 
       {/* Ações */}
       <div className="flex items-center gap-4 pt-3 border-t border-border">

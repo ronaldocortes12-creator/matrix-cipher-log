@@ -20,7 +20,6 @@ type Post = {
   created_at: string;
   author_name: string;
   author_avatar?: string;
-  author_username?: string;
   user_has_liked: boolean;
 };
 

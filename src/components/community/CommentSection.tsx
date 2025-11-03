@@ -41,22 +41,22 @@ export const CommentSection = ({
 
   const loadComments = async () => {
     try {
-      // Buscar comentários com join em profiles
+      // Buscar comentários
       const { data: commentsData, error } = await supabase
         .from('community_comments')
-        .select(`
-          id,
-          user_id,
-          content,
-          likes_count,
-          created_at,
-          profiles!inner(full_name, avatar_url)
-        `)
+        .select('*')
         .eq('post_id', postId)
         .is('deleted_at', null)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
+
+      // Buscar perfis dos autores usando a view pública
+      const userIds = commentsData?.map(c => c.user_id) || [];
+      const { data: profilesData } = await supabase
+        .from('public_profiles')
+        .select('*')
+        .in('user_id', userIds);
 
       // Buscar likes do usuário atual
       let userLikes: string[] = [];
@@ -71,16 +71,19 @@ export const CommentSection = ({
       }
 
       // Formatar comentários
-      const formattedComments = (commentsData || []).map(comment => ({
-        id: comment.id,
-        user_id: comment.user_id,
-        content: comment.content,
-        likes_count: comment.likes_count,
-        created_at: comment.created_at,
-        author_name: (comment.profiles as any)?.full_name || 'Usuário',
-        author_avatar: (comment.profiles as any)?.avatar_url,
-        user_has_liked: userLikes.includes(comment.id)
-      }));
+      const formattedComments = (commentsData || []).map(comment => {
+        const profile = profilesData?.find(p => p.user_id === comment.user_id);
+        return {
+          id: comment.id,
+          user_id: comment.user_id,
+          content: comment.content,
+          likes_count: comment.likes_count,
+          created_at: comment.created_at,
+          author_name: profile?.full_name || 'Usuário',
+          author_avatar: profile?.avatar_url,
+          user_has_liked: userLikes.includes(comment.id)
+        };
+      });
 
       setComments(formattedComments);
     } catch (error: any) {
