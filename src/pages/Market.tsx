@@ -108,16 +108,27 @@ const Market = () => {
         return;
       }
 
-      // Se não houver dados suficientes, disparar cálculo apenas uma vez (sem polling)
+      // Cache de disparo de cálculo (max 1x por hora)
+      const CALC_CACHE_KEY = 'last_crypto_calc_trigger';
+      const CALC_CACHE_TTL = 60 * 60 * 1000; // 1 hora
+      
       const needCount = cryptoList.length;
       let symCount = new Set((probabilities || []).map((p: any) => p.symbol)).size;
       if (symCount < needCount * 0.5) { // Se tiver menos de 50% dos dados
-        console.log(`[MARKET] ⚠️ Só ${symCount}/${needCount} com dados. Disparando cálculo único...`);
-        try {
-          // Dispara o cálculo mas não espera
-          supabase.functions.invoke('calculate-crypto-probabilities', { body: {} }).catch(() => {});
-        } catch (e) {
-          console.warn('[MARKET] Falha ao disparar cálculo', e);
+        const lastCalc = localStorage.getItem(CALC_CACHE_KEY);
+        const shouldTrigger = !lastCalc || (Date.now() - parseInt(lastCalc)) > CALC_CACHE_TTL;
+        
+        if (shouldTrigger) {
+          console.log(`[MARKET] ⚠️ Só ${symCount}/${needCount} com dados. Disparando cálculo SAFE...`);
+          try {
+            // Usar versão SAFE com timeout e fallback
+            supabase.functions.invoke('calculate-crypto-probabilities-safe', { body: {} }).catch(() => {});
+            localStorage.setItem(CALC_CACHE_KEY, Date.now().toString());
+          } catch (e) {
+            console.warn('[MARKET] Falha ao disparar cálculo', e);
+          }
+        } else {
+          console.log(`[MARKET] ⏳ Cálculo já disparado recentemente, aguardando...`);
         }
       }
 

@@ -9,6 +9,7 @@ import { PostCard } from "@/components/community/PostCard";
 import { CreatePostForm } from "@/components/community/CreatePostForm";
 import { Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InfiniteScrollTrigger } from "@/components/InfiniteScrollTrigger";
 
 type Post = {
   id: string;
@@ -29,6 +30,9 @@ const Community = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     initializeCommunity();
@@ -45,18 +49,30 @@ const Community = () => {
     setCurrentUserId(user?.id || null);
   };
 
-  const loadPosts = async () => {
+  const loadPosts = async (isInitial = true) => {
     try {
+      if (isInitial) {
+        setPage(0);
+        setHasMore(true);
+      }
+      
       const { data: { user } } = await supabase.auth.getUser();
+      
+      const POSTS_PER_PAGE = 20;
+      const currentPage = isInitial ? 0 : page;
       
       // Buscar posts usando a view otimizada
       const { data: postsData, error: postsError } = await supabase
         .from('community_feed')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .range(currentPage * POSTS_PER_PAGE, (currentPage + 1) * POSTS_PER_PAGE - 1);
 
       if (postsError) throw postsError;
+      
+      if (!postsData || postsData.length < POSTS_PER_PAGE) {
+        setHasMore(false);
+      }
 
       // Buscar likes do usuário atual
       let userLikes: string[] = [];
@@ -76,7 +92,11 @@ const Community = () => {
         user_has_liked: userLikes.includes(post.id)
       }));
 
-      setPosts(postsWithLikes);
+      if (isInitial) {
+        setPosts(postsWithLikes);
+      } else {
+        setPosts(prev => [...prev, ...postsWithLikes]);
+      }
     } catch (error: any) {
       toast({
         title: t('community.errorTitle'),
@@ -86,6 +106,16 @@ const Community = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const loadMorePosts = async () => {
+    if (!hasMore || isLoadingMore) return;
+    
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    setPage(nextPage);
+    await loadPosts(false);
+    setIsLoadingMore(false);
   };
 
   const subscribeToNewPosts = () => {
@@ -133,14 +163,26 @@ const Community = () => {
               {t('community.noPosts')}
             </div>
           ) : (
-            posts.map(post => (
-              <PostCard 
-                key={post.id}
-                post={post}
-                currentUserId={currentUserId}
-                onUpdate={loadPosts}
-              />
-            ))
+            <>
+              {posts.map(post => (
+                <PostCard 
+                  key={post.id}
+                  post={post}
+                  currentUserId={currentUserId}
+                  onUpdate={() => loadPosts(true)}
+                />
+              ))}
+              {hasMore && (
+                <InfiniteScrollTrigger 
+                  onLoadMore={loadMorePosts} 
+                  hasMore={hasMore}
+                  isLoading={isLoadingMore}
+                />
+              )}
+              {isLoadingMore && (
+                <Skeleton className="h-32 w-full" />
+              )}
+            </>
           )}
         </div>
       </div>

@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { LessonCompleteAnimation } from "@/components/LessonCompleteAnimation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
+import { retryWithBackoff } from "@/utils/retryWithBackoff";
 
 type Message = {
   id: number;
@@ -398,7 +400,7 @@ const Chat = () => {
     setIsLoadingHistory(false);
   };
 
-  const handleSend = async () => {
+  const handleSendInternal = async () => {
     if (!input.trim() || isSending || isLoadingHistory || !userId || !activeLessonId) return;
 
     const userMessage: Message = {
@@ -411,12 +413,9 @@ const Chat = () => {
     setInput("");
     setIsSending(true);
 
-    // Save user message
-    let retries = 0;
-    const maxRetries = 3;
-    
-    while (retries < maxRetries) {
-      try {
+    // Save user message with retry logic
+    try {
+      await retryWithBackoff(async () => {
         const { error: saveError } = await supabase.from('chat_messages').insert({
           user_id: userId,
           lesson_id: activeLessonId,
@@ -425,18 +424,13 @@ const Chat = () => {
         });
 
         if (saveError) throw saveError;
-        break;
-      } catch (error) {
-        retries++;
-        if (retries >= maxRetries) {
-          toast({
-            title: "Erro ao salvar mensagem",
-            description: "Sua mensagem pode não ter sido salva",
-            variant: "destructive"
-          });
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000 * retries));
-      }
+      }, 3, 1000);
+    } catch (error) {
+      toast({
+        title: "Erro ao salvar mensagem",
+        description: "Sua mensagem pode não ter sido salva",
+        variant: "destructive"
+      });
     }
 
     // Send to AI
@@ -660,6 +654,9 @@ const Chat = () => {
       setIsSending(false);
     }
   };
+  
+  // Debounced version to prevent spam
+  const handleSend = useDebouncedCallback(handleSendInternal, 500);
 
   if (isLoading) {
     return (
