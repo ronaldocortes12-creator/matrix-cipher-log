@@ -70,10 +70,141 @@ const Chat = () => {
     }
   }, [activeLessonId]);
 
+  // Sistema inteligente de detecção de conclusão de aula
+  useEffect(() => {
+    if (messages.length === 0 || !activeLessonId) return;
+    
+    const currentLesson = lessons.find(l => l.id === activeLessonId);
+    if (!currentLesson || currentLesson.status === 'completed') return;
+    
+    // Pegar as últimas 5 mensagens da IA
+    const recentAIMessages = messages
+      .filter(m => m.role === 'assistant')
+      .slice(-5);
+    
+    if (recentAIMessages.length === 0) return;
+    
+    let shouldComplete = false;
+    let detectionReason = '';
+    
+    for (const message of recentAIMessages) {
+      const result = detectLessonCompletion(message.content, currentLesson.lesson_number);
+      if (result.detected) {
+        shouldComplete = true;
+        detectionReason = result.reason;
+        break;
+      }
+    }
+    
+    if (shouldComplete && !canCompleteLesson) {
+      console.log(`🔓 Detecção de conclusão: ${detectionReason}`);
+      setCanCompleteLesson(true);
+      
+      // Atualizar no banco de dados
+      supabase
+        .from('lessons')
+        .update({ can_complete: true })
+        .eq('id', activeLessonId)
+        .then(({ error }) => {
+          if (error) console.error('Erro ao marcar can_complete:', error);
+          else console.log('✅ can_complete atualizado no DB');
+        });
+    }
+  }, [messages, activeLessonId, lessons, canCompleteLesson]);
+
   // Set initial sidebar state based on device size
   useEffect(() => {
     setIsSidebarOpen(!isMobile);
   }, [isMobile]);
+
+  // Função avançada de detecção de conclusão de aula
+  const detectLessonCompletion = (aiMessage: string, currentLessonNumber: number): { detected: boolean; reason: string } => {
+    const messageLower = aiMessage.toLowerCase();
+    
+    // 1. DETECÇÃO DE MARCADOR EXPLÍCITO (máxima prioridade)
+    const markerRegex = /✅\s*DIA[_\s](\d+)[_\s]CONCLUÍDO\s*✅/i;
+    const markerMatch = aiMessage.match(markerRegex);
+    if (markerMatch) {
+      const completedDay = parseInt(markerMatch[1]);
+      if (completedDay === currentLessonNumber) {
+        return { detected: true, reason: `Marcador explícito detectado: Dia ${completedDay}` };
+      }
+    }
+    
+    // 2. DETECÇÃO DIRETA DE CONCLUSÃO
+    const directPatterns = [
+      `dia ${currentLessonNumber} está concluído`,
+      `dia ${currentLessonNumber} está encerrado`,
+      `dia ${currentLessonNumber} está finalizado`,
+      `dia ${currentLessonNumber} concluído`,
+      `completou o dia ${currentLessonNumber}`,
+      `finalizamos o dia ${currentLessonNumber}`,
+      `encerramos o dia ${currentLessonNumber}`,
+      `fechamos o dia ${currentLessonNumber}`,
+      `day ${currentLessonNumber} is complete`,
+      `day ${currentLessonNumber} completed`,
+      `día ${currentLessonNumber} completado`,
+    ];
+    
+    for (const pattern of directPatterns) {
+      if (messageLower.includes(pattern)) {
+        return { detected: true, reason: `Frase direta: "${pattern}"` };
+      }
+    }
+    
+    // 3. DETECÇÃO DE TRANSIÇÃO PARA PRÓXIMO DIA
+    const nextDay = currentLessonNumber + 1;
+    const transitionPatterns = [
+      `dia ${nextDay}:`,
+      `dia ${nextDay} -`,
+      `para o dia ${nextDay}`,
+      `vamos para o dia ${nextDay}`,
+      `avançar para o dia ${nextDay}`,
+      `próximo dia (dia ${nextDay})`,
+      `primeira pergunta do dia ${nextDay}`,
+      `day ${nextDay}:`,
+      `to day ${nextDay}`,
+      `día ${nextDay}:`,
+    ];
+    
+    for (const pattern of transitionPatterns) {
+      if (messageLower.includes(pattern)) {
+        return { detected: true, reason: `Transição detectada para Dia ${nextDay}` };
+      }
+    }
+    
+    // 4. DETECÇÃO DE CONFIRMAÇÃO REPETIDA (insistência)
+    const insistencePatterns = ['já te confirmei', 'três vezes', 'várias vezes', 'de novo', 'novamente'];
+    const completionMentions = ['concluído', 'encerrado', 'finalizado', 'completo'];
+    
+    const hasInsistence = insistencePatterns.some(p => messageLower.includes(p));
+    const hasCompletion = completionMentions.some(p => messageLower.includes(p));
+    
+    if (hasInsistence && hasCompletion) {
+      return { detected: true, reason: 'Confirmação repetida de conclusão' };
+    }
+    
+    // 5. PADRÕES GENÉRICOS DE AVANÇO
+    const genericPatterns = [
+      'podemos avançar',
+      'vamos para o próximo',
+      'próxima aula',
+      'próximo estágio',
+      'seguir em frente',
+      "let's move on",
+      'next lesson',
+      'podemos pasar',
+    ];
+    
+    const hasGenericAdvance = genericPatterns.some(p => messageLower.includes(p));
+    const mentionsDayCompletion = completionMentions.some(p => messageLower.includes(p));
+    
+    if (hasGenericAdvance && mentionsDayCompletion) {
+      return { detected: true, reason: 'Padrão genérico de avanço detectado' };
+    }
+    
+    return { detected: false, reason: '' };
+  };
 
   const scrollToBottom = (smooth = false) => {
     const el = messagesContainerRef.current;

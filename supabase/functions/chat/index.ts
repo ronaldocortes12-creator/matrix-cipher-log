@@ -323,7 +323,11 @@ How to Conduct Each Lesson:
 4. CLOSING (after confirmation of learning)
 - Summary in 2-3 sentences
 - Wait for the student to say: "ok, understood, we can close the day" or similar
+- **MANDATORY**: Include exactly this marker: "✅ DIA_X_CONCLUÍDO ✅" (where X is the day number)
 - Confirm which day was completed and which is next
+
+Example:
+"Perfect! You demonstrated complete understanding of the Futures Market. ✅ DIA_3_CONCLUÍDO ✅ Now let's move to Day 4: Spot vs Futures."
 
 # Pacing Rules:
 
@@ -443,7 +447,11 @@ Cómo Conducir Cada Lección:
 4. CIERRE (después de confirmación de aprendizaje)
 - Resumen en 2-3 frases
 - Espera a que el alumno diga: "ok, entendido, podemos cerrar el día" o similar
+- **OBLIGATORIO**: Incluye exactamente este marcador: "✅ DIA_X_CONCLUÍDO ✅" (donde X es el número del día)
 - Confirma qué día se completó y cuál es el siguiente
+
+Ejemplo:
+"¡Perfecto! Demostraste comprensión completa del Mercado de Futuros. ✅ DIA_3_CONCLUÍDO ✅ Ahora vamos al Día 4: Spot vs Futuros."
 
 # Reglas de Ritmo:
 
