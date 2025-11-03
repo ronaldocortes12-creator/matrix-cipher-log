@@ -83,6 +83,36 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_logs: {
+        Row: {
+          backup_timestamp: string
+          backup_type: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          status: string
+          tables_backed_up: string[]
+        }
+        Insert: {
+          backup_timestamp?: string
+          backup_type: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          status?: string
+          tables_backed_up: string[]
+        }
+        Update: {
+          backup_timestamp?: string
+          backup_type?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          status?: string
+          tables_backed_up?: string[]
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
@@ -161,6 +191,13 @@ export type Database = {
             foreignKeyName: "community_comments_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
+            referencedRelation: "community_feed_optimized"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
             referencedRelation: "community_posts"
             referencedColumns: ["id"]
           },
@@ -201,6 +238,13 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "community_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_feed_optimized"
             referencedColumns: ["id"]
           },
           {
@@ -530,6 +574,51 @@ export type Database = {
         }
         Relationships: []
       }
+      error_logs: {
+        Row: {
+          error_message: string
+          error_type: string
+          function_name: string
+          id: string
+          metadata: Json | null
+          occurred_at: string
+          request_id: string | null
+          resolved: boolean | null
+          resolved_at: string | null
+          resolved_by: string | null
+          stack_trace: string | null
+          user_id: string | null
+        }
+        Insert: {
+          error_message: string
+          error_type: string
+          function_name: string
+          id?: string
+          metadata?: Json | null
+          occurred_at?: string
+          request_id?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          stack_trace?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          error_message?: string
+          error_type?: string
+          function_name?: string
+          id?: string
+          metadata?: Json | null
+          occurred_at?: string
+          request_id?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          stack_trace?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       global_crypto_market_cap: {
         Row: {
           created_at: string
@@ -814,6 +903,30 @@ export type Database = {
         }
         Relationships: []
       }
+      system_health_snapshots: {
+        Row: {
+          created_at: string
+          id: string
+          metrics: Json
+          snapshot_time: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metrics: Json
+          snapshot_time?: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metrics?: Json
+          snapshot_time?: string
+          status?: string
+        }
+        Relationships: []
+      }
       user_interactions: {
         Row: {
           action_data: Json | null
@@ -1000,6 +1113,23 @@ export type Database = {
         }
         Relationships: []
       }
+      community_feed_optimized: {
+        Row: {
+          author_avatar: string | null
+          author_name: string | null
+          author_status: Database["public"]["Enums"]["account_status"] | null
+          author_username: string | null
+          comments_count: number | null
+          content: string | null
+          created_at: string | null
+          id: string | null
+          image_url: string | null
+          likes_count: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       public_profiles: {
         Row: {
           avatar_url: string | null
@@ -1026,6 +1156,8 @@ export type Database = {
       backend_health_check: { Args: never; Returns: Json }
       cleanup_old_cron_logs: { Args: never; Returns: undefined }
       cleanup_old_crypto_data: { Args: never; Returns: undefined }
+      cleanup_old_health_snapshots: { Args: never; Returns: undefined }
+      cleanup_old_rate_limits: { Args: never; Returns: undefined }
       create_user_session: {
         Args: {
           p_device_info?: Json
@@ -1036,6 +1168,7 @@ export type Database = {
         }
         Returns: string
       }
+      daily_backup_log: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1044,12 +1177,14 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      refresh_community_feed: { Args: never; Returns: undefined }
       soft_delete_user: { Args: { target_user_id: string }; Returns: boolean }
       system_health_check: { Args: never; Returns: Json }
       update_session_activity: {
         Args: { p_session_token: string }
         Returns: boolean
       }
+      weekly_maintenance: { Args: never; Returns: undefined }
     }
     Enums: {
       account_status:
