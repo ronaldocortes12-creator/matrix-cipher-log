@@ -250,6 +250,133 @@ LIMIT 5;
 
 ---
 
+## 📊 QUERIES ADMINISTRATIVAS PARA ANÁLISE DE USUÁRIOS
+
+### Ver Todos os Usuários e Seu Progresso Geral
+
+```sql
+SELECT * FROM admin_user_overview 
+ORDER BY user_since DESC;
+```
+
+**Campos retornados:**
+- `user_id`, `full_name`, `username`, `email_verified`
+- `account_status`, `crypto_experience`, `user_since`, `last_login_at`
+- `language`, `has_seen_welcome`
+- `total_lessons`, `lessons_completed`, `total_messages`
+- `posts_created`, `comments_made`
+
+---
+
+### Ver TODAS as Mensagens de um Usuário Específico
+
+```sql
+SELECT * FROM admin_messages_by_user 
+WHERE user_id = 'USER_ID_AQUI' 
+ORDER BY sent_at DESC;
+```
+
+**Campos retornados:**
+- `user_id`, `user_name`, `lesson_id`, `lesson_number`, `lesson_title`
+- `message_id`, `message_role`, `message_content`, `sent_at`
+- `is_orphan_message` (flag para mensagens sem lesson)
+
+---
+
+### Ver Progresso Detalhado de Lessons de um Usuário
+
+```sql
+SELECT * FROM admin_user_lesson_progress 
+WHERE user_id = 'USER_ID_AQUI' 
+ORDER BY lesson_number;
+```
+
+**Campos retornados:**
+- `user_id`, `user_name`, `lesson_number`, `title`
+- `lesson_status`, `lesson_created`, `lesson_updated`
+- `progress_completed`, `progress_completed_at`
+- `messages_in_lesson`, `first_message_at`, `last_message_at`
+
+---
+
+### Ver Atividade Comunitária de um Usuário
+
+```sql
+SELECT * FROM admin_user_community_activity 
+WHERE user_id = 'USER_ID_AQUI';
+```
+
+**Campos retornados:**
+- `user_id`, `user_name`
+- `total_posts`, `total_post_likes_received`, `last_post_at`
+- `total_comments`, `total_comment_likes_received`, `last_comment_at`
+- `total_likes_given`, `total_engagement_score`
+
+---
+
+### Identificar Mensagens Órfãs (Se Houver)
+
+```sql
+SELECT * FROM admin_messages_by_user 
+WHERE is_orphan_message = true;
+```
+
+**⚠️ Ação necessária se encontrar mensagens órfãs:**
+```sql
+-- Associar à Lesson 1 do usuário
+UPDATE chat_messages 
+SET lesson_id = (
+  SELECT id FROM lessons 
+  WHERE user_id = 'USER_ID_AQUI' 
+  AND lesson_number = 1 
+  LIMIT 1
+)
+WHERE id = 'MESSAGE_ID_AQUI';
+```
+
+---
+
+### Ver Usuários Mais Engajados na Comunidade
+
+```sql
+SELECT * FROM admin_user_community_activity 
+ORDER BY total_engagement_score DESC 
+LIMIT 10;
+```
+
+---
+
+### Ver Histórico Completo de Interações (Todas as Tabelas)
+
+```sql
+-- Mensagens do usuário
+SELECT 'chat_message' as tipo, created_at, content as detalhe
+FROM chat_messages WHERE user_id = 'USER_ID_AQUI'
+
+UNION ALL
+
+-- Posts criados
+SELECT 'post' as tipo, created_at, content as detalhe
+FROM community_posts WHERE user_id = 'USER_ID_AQUI' AND deleted_at IS NULL
+
+UNION ALL
+
+-- Comentários feitos
+SELECT 'comment' as tipo, created_at, content as detalhe
+FROM community_comments WHERE user_id = 'USER_ID_AQUI' AND deleted_at IS NULL
+
+UNION ALL
+
+-- Ações de auditoria
+SELECT 'audit' as tipo, created_at, action as detalhe
+FROM audit_logs WHERE user_id = 'USER_ID_AQUI'
+
+ORDER BY created_at DESC
+LIMIT 100;
+```
+
+---
+
 ## 📈 MÉTRICAS DE USO
 
 ### Usuários Ativos (últimos 7 dias)

@@ -118,7 +118,7 @@ export type Database = {
           content: string
           created_at: string | null
           id: string
-          lesson_id: string | null
+          lesson_id: string
           role: string
           user_id: string
         }
@@ -126,7 +126,7 @@ export type Database = {
           content: string
           created_at?: string | null
           id?: string
-          lesson_id?: string | null
+          lesson_id: string
           role: string
           user_id: string
         }
@@ -134,7 +134,7 @@ export type Database = {
           content?: string
           created_at?: string | null
           id?: string
-          lesson_id?: string | null
+          lesson_id?: string
           role?: string
           user_id?: string
         }
@@ -1097,6 +1097,105 @@ export type Database = {
       }
     }
     Views: {
+      admin_messages_by_user: {
+        Row: {
+          is_orphan_message: boolean | null
+          lesson_id: string | null
+          lesson_number: number | null
+          lesson_title: string | null
+          message_content: string | null
+          message_id: string | null
+          message_role: string | null
+          sent_at: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_user_community_activity: {
+        Row: {
+          last_comment_at: string | null
+          last_post_at: string | null
+          total_comment_likes_received: number | null
+          total_comments: number | null
+          total_engagement_score: number | null
+          total_likes_given: number | null
+          total_post_likes_received: number | null
+          total_posts: number | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          last_comment_at?: never
+          last_post_at?: never
+          total_comment_likes_received?: never
+          total_comments?: never
+          total_engagement_score?: never
+          total_likes_given?: never
+          total_post_likes_received?: never
+          total_posts?: never
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          last_comment_at?: never
+          last_post_at?: never
+          total_comment_likes_received?: never
+          total_comments?: never
+          total_engagement_score?: never
+          total_likes_given?: never
+          total_post_likes_received?: never
+          total_posts?: never
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      admin_user_lesson_progress: {
+        Row: {
+          first_message_at: string | null
+          last_message_at: string | null
+          lesson_created: string | null
+          lesson_number: number | null
+          lesson_status: string | null
+          lesson_updated: string | null
+          messages_in_lesson: number | null
+          progress_completed: boolean | null
+          progress_completed_at: string | null
+          title: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Relationships: []
+      }
+      admin_user_overview: {
+        Row: {
+          account_status: Database["public"]["Enums"]["account_status"] | null
+          comments_made: number | null
+          crypto_experience: string | null
+          email_verified: boolean | null
+          full_name: string | null
+          has_seen_welcome: boolean | null
+          language: string | null
+          last_login_at: string | null
+          lessons_completed: number | null
+          posts_created: number | null
+          total_lessons: number | null
+          total_messages: number | null
+          user_id: string | null
+          user_since: string | null
+          username: string | null
+        }
+        Relationships: []
+      }
       community_feed: {
         Row: {
           author_avatar: string | null
