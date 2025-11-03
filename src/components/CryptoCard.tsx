@@ -1,6 +1,8 @@
-import { TrendingUp, TrendingDown, Info } from "lucide-react";
+import { useState } from "react";
+import { TrendingUp, TrendingDown, Info, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CryptoInfoDialog } from "@/components/CryptoInfoDialog";
 
 type CryptoCardProps = {
   name: string;
@@ -41,32 +43,44 @@ export const CryptoCard = ({
   historicalATLDate,
   debug,
 }: CryptoCardProps) => {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   return (
-    <div className="glass-effect rounded-xl p-5 border border-primary/20 hover:border-primary/40 transition-all duration-300 group">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-card/50 flex items-center justify-center">
-            <img src={logo} alt={name} className="w-6 h-6" />
+    <>
+      <div className="glass-effect rounded-xl p-5 border border-primary/20 hover:border-primary/40 transition-all duration-300 group">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-card/50 flex items-center justify-center">
+              <img src={logo} alt={name} className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-foreground">{name}</h3>
+              <p className="text-sm text-muted-foreground">{symbol}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-foreground">{name}</h3>
-            <p className="text-sm text-muted-foreground">{symbol}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsDialogOpen(true)}
+              className="p-1.5 rounded-full hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+              aria-label={`Sobre ${name}`}
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                trend === "up" ? "bg-green-500/20" : "bg-red-500/20"
+              )}
+            >
+              {trend === "up" ? (
+                <TrendingUp className="h-5 w-5 text-green-500" />
+              ) : (
+                <TrendingDown className="h-5 w-5 text-red-500" />
+              )}
+            </div>
           </div>
         </div>
-        <div
-          className={cn(
-            "p-2 rounded-full",
-            trend === "up" ? "bg-green-500/20" : "bg-red-500/20"
-          )}
-        >
-          {trend === "up" ? (
-            <TrendingUp className="h-5 w-5 text-green-500" />
-          ) : (
-            <TrendingDown className="h-5 w-5 text-red-500" />
-          )}
-        </div>
-      </div>
 
       {/* Price */}
       <div className="mb-4">
@@ -203,6 +217,15 @@ export const CryptoCard = ({
           </>
         )}
       </div>
-    </div>
+      </div>
+
+      <CryptoInfoDialog
+        name={name}
+        symbol={symbol}
+        logo={logo}
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+      />
+    </>
   );
 };
