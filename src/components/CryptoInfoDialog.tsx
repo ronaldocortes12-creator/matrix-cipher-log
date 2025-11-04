@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,14 +108,17 @@ export const CryptoInfoDialog = ({ name, symbol, logo, isOpen, onClose }: Crypto
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl glass-effect border-primary/20 max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl glass-effect border-primary/20 max-h-[85vh] overflow-hidden flex flex-col" aria-describedby="crypto-info-desc">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 text-xl">
             {header}
           </DialogTitle>
+          <DialogDescription id="crypto-info-desc" className="sr-only">
+            Informações detalhadas sobre {name}
+          </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-1 max-h-[500px]">
+        <ScrollArea className="h-[calc(85vh-140px)]">
           <div className="mt-4 pr-4">
             {content}
           </div>
