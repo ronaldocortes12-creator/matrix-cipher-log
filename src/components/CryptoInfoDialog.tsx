@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { X } from "lucide-react";
+import { parseSimpleMarkdown } from "@/utils/markdownToHtml";
 
 interface CryptoInfoDialogProps {
   name: string;
@@ -74,9 +75,10 @@ export const CryptoInfoDialog = ({ name, symbol, logo, isOpen, onClose }: Crypto
           <Skeleton className="h-4 w-5/6" />
         </div>
       ) : (
-        <div className="text-foreground leading-relaxed whitespace-pre-line break-words">
-          {info}
-        </div>
+        <div 
+          className="text-foreground leading-relaxed break-words [&_p]:mb-4 [&_p:last-child]:mb-0 [&_strong]:font-bold [&_em]:italic"
+          dangerouslySetInnerHTML={{ __html: parseSimpleMarkdown(info) }}
+        />
       )}
     </div>
   );
