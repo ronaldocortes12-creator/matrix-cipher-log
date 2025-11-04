@@ -74,9 +74,9 @@ export const CryptoInfoDialog = ({ name, symbol, logo, isOpen, onClose }: Crypto
           <Skeleton className="h-4 w-5/6" />
         </div>
       ) : (
-        <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+        <div className="text-foreground leading-relaxed whitespace-pre-line break-words">
           {info}
-        </p>
+        </div>
       )}
     </div>
   );
@@ -84,16 +84,20 @@ export const CryptoInfoDialog = ({ name, symbol, logo, isOpen, onClose }: Crypto
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={onClose}>
-        <DrawerContent className="glass-effect border-primary/20 max-h-[90vh]">
-          <DrawerHeader className="relative pb-4">
+        <DrawerContent className="glass-effect border-primary/20 max-h-[90vh] min-h-[300px]">
+          <DrawerHeader className="relative pb-2">
             <DrawerTitle className="text-left">{header}</DrawerTitle>
             <DrawerClose className="absolute right-4 top-4 rounded-full bg-background/80 backdrop-blur-sm p-2 hover:bg-background transition-colors">
               <X className="h-5 w-5" />
             </DrawerClose>
           </DrawerHeader>
           
-          <ScrollArea className="h-[calc(90vh-120px)] px-4 pb-8">
-            {content}
+          <div className="w-12 h-1 mx-auto bg-muted/50 rounded-full mb-2" />
+          
+          <ScrollArea className="h-[calc(90vh-140px)]">
+            <div className="px-4 pb-8">
+              {content}
+            </div>
           </ScrollArea>
         </DrawerContent>
       </Drawer>
@@ -109,8 +113,8 @@ export const CryptoInfoDialog = ({ name, symbol, logo, isOpen, onClose }: Crypto
           </DialogTitle>
         </DialogHeader>
         
-        <ScrollArea className="flex-1 pr-4 max-h-[500px]">
-          <div className="mt-4">
+        <ScrollArea className="flex-1 max-h-[500px]">
+          <div className="mt-4 pr-4">
             {content}
           </div>
         </ScrollArea>
