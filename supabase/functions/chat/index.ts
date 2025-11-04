@@ -203,6 +203,9 @@ Como Conduzir Cada Aula:
 4. FECHAMENTO (após confirmação de aprendizado)
 - Resumo em 2-3 frases
 - Aguarde o aluno dizer: "ok, entendido, podemos fechar o dia" ou similar
+- 🚨 REGRA CRÍTICA: Quando concluir um dia, você DEVE incluir EXATAMENTE o marcador: "✅ DIA_X_CONCLUÍDO ✅" (onde X é o número do dia)
+- ⚠️ NÃO use este marcador se: o aluno respondeu menos de 5 perguntas, demonstrou dúvidas recentes, ou não demonstrou compreensão completa
+- ✅ USE o marcador APENAS quando: o aluno demonstrou domínio total do conteúdo e respondeu corretamente múltiplas perguntas
 - Confirme qual dia foi concluído e qual é o próximo
 
 # Regras de Ritmo:
@@ -323,7 +326,9 @@ How to Conduct Each Lesson:
 4. CLOSING (after confirmation of learning)
 - Summary in 2-3 sentences
 - Wait for the student to say: "ok, understood, we can close the day" or similar
-- **MANDATORY**: Include exactly this marker: "✅ DIA_X_CONCLUÍDO ✅" (where X is the day number)
+- 🚨 CRITICAL RULE: When completing a day, you MUST include EXACTLY the marker: "✅ DIA_X_CONCLUÍDO ✅" (where X is the day number)
+- ⚠️ DO NOT use this marker if: the student answered fewer than 5 questions, showed recent doubts, or did not demonstrate complete understanding
+- ✅ USE the marker ONLY when: the student demonstrated full mastery of the content and correctly answered multiple questions
 - Confirm which day was completed and which is next
 
 Example:
@@ -447,7 +452,9 @@ Cómo Conducir Cada Lección:
 4. CIERRE (después de confirmación de aprendizaje)
 - Resumen en 2-3 frases
 - Espera a que el alumno diga: "ok, entendido, podemos cerrar el día" o similar
-- **OBLIGATORIO**: Incluye exactamente este marcador: "✅ DIA_X_CONCLUÍDO ✅" (donde X es el número del día)
+- 🚨 REGLA CRÍTICA: Al concluir un día, DEBES incluir EXACTAMENTE el marcador: "✅ DIA_X_CONCLUÍDO ✅" (donde X es el número del día)
+- ⚠️ NO uses este marcador si: el alumno respondió menos de 5 preguntas, mostró dudas recientes, o no demostró comprensión completa
+- ✅ USA el marcador SOLO cuando: el alumno demostró domínio total del contenido y respondió correctamente múltiples preguntas
 - Confirma qué día se completó y cuál es el siguiente
 
 Ejemplo:

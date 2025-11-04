@@ -70,138 +70,111 @@ const Chat = () => {
     }
   }, [activeLessonId]);
 
-  // Sistema inteligente de detecção de conclusão de aula
+  // Detecção automática de conclusão de aula (RESTRITIVA)
   useEffect(() => {
-    if (messages.length === 0 || !activeLessonId) return;
-    
-    const currentLesson = lessons.find(l => l.id === activeLessonId);
-    if (!currentLesson || currentLesson.status === 'completed') return;
-    
-    // Pegar as últimas 5 mensagens da IA
-    const recentAIMessages = messages
-      .filter(m => m.role === 'assistant')
-      .slice(-5);
-    
-    if (recentAIMessages.length === 0) return;
-    
-    let shouldComplete = false;
-    let detectionReason = '';
-    
-    for (const message of recentAIMessages) {
-      const result = detectLessonCompletion(message.content, currentLesson.lesson_number);
-      if (result.detected) {
-        shouldComplete = true;
-        detectionReason = result.reason;
-        break;
-      }
+    if (isLoadingHistory || messages.length === 0 || !activeLessonId) {
+      return;
     }
+
+    const currentLesson = lessons.find(l => l.id === activeLessonId);
+    if (!currentLesson || currentLesson.status === 'completed') {
+      return;
+    }
+
+    // Contar mensagens do usuário (validação de interação mínima)
+    const userMessageCount = messages.filter(m => m.role === 'user').length;
+
+    // Pegar APENAS a última mensagem da IA (não analisar histórico)
+    const lastAIMessage = messages
+      .filter(m => m.role === 'assistant')
+      .pop();
+
+    if (!lastAIMessage) return;
+
+    console.log('🔍 [Detecção] Estado:', {
+      lesson: currentLesson.lesson_number,
+      userMessages: userMessageCount,
+      canComplete: canCompleteLesson,
+      lastAIPreview: lastAIMessage.content.substring(0, 100)
+    });
+
+    const result = detectLessonCompletion(
+      lastAIMessage.content, 
+      currentLesson.lesson_number,
+      userMessageCount
+    );
     
-    if (shouldComplete && !canCompleteLesson) {
-      console.log(`🔓 Detecção de conclusão: ${detectionReason}`);
+    if (result.detected && !canCompleteLesson) {
+      console.log(`🔓 AUTORIZAÇÃO DE CONCLUSÃO: ${result.reason}`);
+      console.log(`   📊 Mensagens do usuário: ${userMessageCount}`);
+      console.log(`   📅 Dia: ${currentLesson.lesson_number}`);
+      
       setCanCompleteLesson(true);
       
-      // Atualizar no banco de dados
+      // Atualizar no banco
       supabase
         .from('lessons')
         .update({ can_complete: true })
         .eq('id', activeLessonId)
         .then(({ error }) => {
-          if (error) console.error('Erro ao marcar can_complete:', error);
-          else console.log('✅ can_complete atualizado no DB');
+          if (error) console.error('❌ Erro ao marcar can_complete:', error);
+          else console.log('✅ can_complete=true salvo no DB');
         });
     }
-  }, [messages, activeLessonId, lessons, canCompleteLesson]);
+  }, [messages, activeLessonId, lessons, canCompleteLesson, isLoadingHistory]);
 
   // Set initial sidebar state based on device size
   useEffect(() => {
     setIsSidebarOpen(!isMobile);
   }, [isMobile]);
 
-  // Função avançada de detecção de conclusão de aula
-  const detectLessonCompletion = (aiMessage: string, currentLessonNumber: number): { detected: boolean; reason: string } => {
+  // Função RESTRITIVA de detecção de conclusão de aula
+  const detectLessonCompletion = (
+    aiMessage: string, 
+    currentLessonNumber: number,
+    userMessageCount: number
+  ): { detected: boolean; reason: string } => {
+    
+    // REGRA 1: Usuário precisa ter enviado pelo menos 5 mensagens
+    if (userMessageCount < 5) {
+      return { detected: false, reason: 'Interação insuficiente (< 5 mensagens)' };
+    }
+    
     const messageLower = aiMessage.toLowerCase();
     
-    // 1. DETECÇÃO DE MARCADOR EXPLÍCITO (máxima prioridade)
+    // REGRA 2: MARCADOR EXPLÍCITO (máxima prioridade - 100% confiável)
     const markerRegex = /✅\s*DIA[_\s](\d+)[_\s]CONCLUÍDO\s*✅/i;
     const markerMatch = aiMessage.match(markerRegex);
     if (markerMatch) {
       const completedDay = parseInt(markerMatch[1]);
       if (completedDay === currentLessonNumber) {
-        return { detected: true, reason: `Marcador explícito detectado: Dia ${completedDay}` };
+        return { detected: true, reason: `✅ Marcador oficial: Dia ${completedDay} concluído` };
       }
     }
     
-    // 2. DETECÇÃO DIRETA DE CONCLUSÃO
+    // REGRA 3: DETECÇÃO DIRETA (alta confiança)
     const directPatterns = [
       `dia ${currentLessonNumber} está concluído`,
-      `dia ${currentLessonNumber} está encerrado`,
-      `dia ${currentLessonNumber} está finalizado`,
       `dia ${currentLessonNumber} concluído`,
-      `completou o dia ${currentLessonNumber}`,
       `finalizamos o dia ${currentLessonNumber}`,
-      `encerramos o dia ${currentLessonNumber}`,
-      `fechamos o dia ${currentLessonNumber}`,
-      `day ${currentLessonNumber} is complete`,
-      `day ${currentLessonNumber} completed`,
-      `día ${currentLessonNumber} completado`,
+      `completamos o dia ${currentLessonNumber}`,
     ];
     
     for (const pattern of directPatterns) {
       if (messageLower.includes(pattern)) {
-        return { detected: true, reason: `Frase direta: "${pattern}"` };
+        return { detected: true, reason: `📝 Frase direta: "${pattern}"` };
       }
     }
     
-    // 3. DETECÇÃO DE TRANSIÇÃO PARA PRÓXIMO DIA
+    // REGRA 4: TRANSIÇÃO FORTE para próximo dia (média confiança)
     const nextDay = currentLessonNumber + 1;
-    const transitionPatterns = [
-      `dia ${nextDay}:`,
-      `dia ${nextDay} -`,
-      `para o dia ${nextDay}`,
-      `vamos para o dia ${nextDay}`,
-      `avançar para o dia ${nextDay}`,
-      `próximo dia (dia ${nextDay})`,
-      `primeira pergunta do dia ${nextDay}`,
-      `day ${nextDay}:`,
-      `to day ${nextDay}`,
-      `día ${nextDay}:`,
-    ];
+    const strongTransitionPattern = `dia ${nextDay}:`;
     
-    for (const pattern of transitionPatterns) {
-      if (messageLower.includes(pattern)) {
-        return { detected: true, reason: `Transição detectada para Dia ${nextDay}` };
-      }
+    if (messageLower.includes(strongTransitionPattern)) {
+      return { detected: true, reason: `➡️ Transição confirmada: Iniciou Dia ${nextDay}` };
     }
     
-    // 4. DETECÇÃO DE CONFIRMAÇÃO REPETIDA (insistência)
-    const insistencePatterns = ['já te confirmei', 'três vezes', 'várias vezes', 'de novo', 'novamente'];
-    const completionMentions = ['concluído', 'encerrado', 'finalizado', 'completo'];
-    
-    const hasInsistence = insistencePatterns.some(p => messageLower.includes(p));
-    const hasCompletion = completionMentions.some(p => messageLower.includes(p));
-    
-    if (hasInsistence && hasCompletion) {
-      return { detected: true, reason: 'Confirmação repetida de conclusão' };
-    }
-    
-    // 5. PADRÕES GENÉRICOS DE AVANÇO
-    const genericPatterns = [
-      'podemos avançar',
-      'vamos para o próximo',
-      'próxima aula',
-      'próximo estágio',
-      'seguir em frente',
-      "let's move on",
-      'next lesson',
-      'podemos pasar',
-    ];
-    
-    const hasGenericAdvance = genericPatterns.some(p => messageLower.includes(p));
-    const mentionsDayCompletion = completionMentions.some(p => messageLower.includes(p));
-    
-    if (hasGenericAdvance && mentionsDayCompletion) {
-      return { detected: true, reason: 'Padrão genérico de avanço detectado' };
-    }
+    // REGRA 5: Padrões genéricos NÃO são mais aceitos (removidos para evitar falsos positivos)
     
     return { detected: false, reason: '' };
   };
@@ -516,19 +489,37 @@ const Chat = () => {
   };
 
   const handleSelectLesson = async (lessonId: string) => {
-    setIsLoadingHistory(true);
+    console.log(`Switching to lesson: ${lessonId}`);
     setActiveLessonId(lessonId);
     setMessages([]);
-    setInput("");
-    setCanCompleteLesson(false);
-    setIsInitialLoad(true);
-    
-    if (userId) {
-      // Passar lessonId diretamente para evitar race condition do estado
-      await loadChatHistory(userId, lessonId);
+    setCanCompleteLesson(false); // SEMPRE resetar ao trocar de aula
+    setIsLoadingHistory(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('User not authenticated');
+        return;
+      }
+
+      await loadChatHistory(user.id, lessonId);
+      
+      // Sincronizar estado can_complete com banco de dados
+      const { data: lessonData } = await supabase
+        .from('lessons')
+        .select('can_complete')
+        .eq('id', lessonId)
+        .single();
+      
+      if (lessonData) {
+        console.log(`📊 can_complete do DB: ${lessonData.can_complete}`);
+        setCanCompleteLesson(lessonData.can_complete || false);
+      }
+    } catch (error) {
+      console.error('Error switching lesson:', error);
+    } finally {
+      setIsLoadingHistory(false);
     }
-    
-    setIsLoadingHistory(false);
   };
 
   const handleSend = async () => {
@@ -913,22 +904,22 @@ const Chat = () => {
           {/* Botão Concluir Dia */}
           {activeLessonId && lessons.find(l => l.id === activeLessonId && l.status === 'active') && (
             <div className="flex justify-center">
-              <Button
-                onClick={handleCompleteDay}
-                variant="outline"
-                disabled={!canCompleteLesson}
-                className={`glass-effect border-primary/40 font-semibold transition-all ${
-                  canCompleteLesson 
-                    ? 'hover:bg-primary/20 text-primary cursor-pointer animate-pulse' 
-                    : 'opacity-50 cursor-not-allowed text-muted-foreground'
-                }`}
-                title={canCompleteLesson 
-                  ? 'Clique para concluir o dia' 
-                  : 'Aguarde Jeff Wu autorizar a conclusão desta aula'
-                }
-              >
-                {canCompleteLesson ? '✅' : '🔒'} Concluir Dia {lessons.find(l => l.id === activeLessonId)?.lesson_number}
-              </Button>
+            <Button
+              onClick={handleCompleteDay}
+              variant="outline"
+              disabled={!canCompleteLesson}
+              className={`glass-effect border-primary/40 font-semibold transition-all ${
+                canCompleteLesson 
+                  ? 'hover:bg-primary/20 text-primary cursor-pointer' 
+                  : 'opacity-50 cursor-not-allowed text-muted-foreground'
+              }`}
+              title={canCompleteLesson 
+                ? 'Clique para concluir o dia' 
+                : 'Aguarde Jeff Wu autorizar a conclusão desta aula'
+              }
+            >
+              {canCompleteLesson ? '✅' : '🔒'} Concluir Dia {lessons.find(l => l.id === activeLessonId)?.lesson_number}
+            </Button>
             </div>
           )}
           
