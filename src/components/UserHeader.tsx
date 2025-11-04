@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { ImageCropDialog } from "./ImageCropDialog";
 
 export const UserHeader = () => {
   const [showProfileDialog, setShowProfileDialog] = useState(false);
@@ -18,6 +19,8 @@ export const UserHeader = () => {
   const [cryptoExperience, setCryptoExperience] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [showCropDialog, setShowCropDialog] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -76,13 +79,14 @@ export const UserHeader = () => {
 
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
+        .update({
           full_name: fullName.trim(),
           age: ageNum,
           crypto_experience: cryptoExperience || null,
-          avatar_url: avatarUrl || null
-        });
+          avatar_url: avatarUrl || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -103,24 +107,79 @@ export const UserHeader = () => {
     }
   };
 
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Validar tipo
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Erro",
+        description: "Apenas arquivos JPG, PNG ou WEBP são permitidos",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Validar tamanho (máximo 2MB)
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({
+        title: "Erro",
+        description: "A imagem deve ter no máximo 2MB",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Converter para URL local para o cropper
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImageToCrop(reader.result as string);
+      setShowCropDialog(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
     try {
       setUploading(true);
       
-      if (!event.target.files || event.target.files.length === 0) {
-        return;
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
 
-      const file = event.target.files[0];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      
-      // Simple base64 conversion for now (in production, use Supabase Storage)
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      // Criar nome único do arquivo
+      const fileExt = 'jpg';
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      // Converter blob para file
+      const croppedFile = new File([croppedBlob], fileName, {
+        type: 'image/jpeg'
+      });
+
+      // Fazer upload para Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, croppedFile, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      // Atualizar estado local
+      setAvatarUrl(publicUrl);
+
+      toast({
+        title: "Sucesso",
+        description: "Foto enviada com sucesso!"
+      });
 
     } catch (error) {
       console.error('Error uploading avatar:', error);
@@ -216,10 +275,17 @@ export const UserHeader = () => {
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   className="hidden"
-                  onChange={handleAvatarUpload}
+                  onChange={handleAvatarSelect}
                 />
               </div>
             </div>
+
+            <ImageCropDialog
+              image={imageToCrop || ''}
+              open={showCropDialog}
+              onClose={() => setShowCropDialog(false)}
+              onCropComplete={handleCropComplete}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="name">Nome *</Label>
