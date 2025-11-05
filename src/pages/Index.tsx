@@ -155,28 +155,28 @@ const Index = () => {
         <img 
           src={logo} 
           alt="" 
-          className="w-[800px] h-auto object-contain opacity-[0.03] select-none"
+          className="w-[640px] h-auto object-contain opacity-[0.03] select-none"
         />
       </div>
       
       {/* Animated Premium Glows */}
-      <div className="fixed top-20 left-20 w-[600px] h-[600px] bg-primary/10 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1 }} />
-      <div className="fixed bottom-20 right-20 w-[500px] h-[500px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
+      <div className="fixed top-20 left-20 w-[480px] h-[480px] bg-primary/10 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1 }} />
+      <div className="fixed bottom-20 right-20 w-[400px] h-[400px] bg-primary/8 rounded-full blur-3xl animate-pulse-glow" style={{ zIndex: 1, animationDelay: '1.5s' }} />
 
       {/* Login Container */}
-      <div className="relative z-10 w-full max-w-md px-6 mx-4 py-0 -mt-8 sm:-mt-12">
+      <div className="relative z-10 w-full max-w-sm px-5 mx-4 py-0 -mt-8 sm:-mt-12">
         {/* Logo */}
         <div className="flex justify-center -mb-10 sm:-mb-8">
           <img 
             src={logo} 
             alt="Global Institute of Cripto" 
-            className="w-72 sm:w-80 h-auto object-contain drop-shadow-[0_0_50px_rgba(77,208,225,0.6)] filter brightness-125 contrast-125"
+            className="w-58 sm:w-64 h-auto object-contain drop-shadow-[0_0_50px_rgba(77,208,225,0.6)] filter brightness-125 contrast-125"
             style={{ filter: 'drop-shadow(0 0 50px rgba(77,208,225,0.6)) brightness(1.25) contrast(1.25)' }}
           />
         </div>
 
         {/* Premium Login Card */}
-        <div className="glass-effect rounded-2xl p-3 sm:p-6 pt-2 sm:pt-3 shadow-2xl border-glow relative overflow-hidden -mt-8 sm:-mt-6">
+        <div className="glass-effect rounded-2xl p-3 sm:p-5 pt-2 sm:pt-3 shadow-2xl border-glow relative overflow-hidden -mt-8 sm:-mt-6">
           {/* Premium corner accents */}
           <div className="absolute top-0 left-0 w-20 h-20 border-t-2 border-l-2 border-primary/30 rounded-tl-2xl"></div>
           <div className="absolute top-0 right-0 w-20 h-20 border-t-2 border-r-2 border-primary/30 rounded-tr-2xl"></div>
@@ -187,7 +187,7 @@ const Index = () => {
             <img 
               src={logo} 
               alt="" 
-              className="w-[300px] h-auto object-contain opacity-[0.04] select-none"
+              className="w-[240px] h-auto object-contain opacity-[0.04] select-none"
             />
           </div>
 
@@ -220,16 +220,16 @@ const Index = () => {
           </div>
 
           <div className="text-center mb-3 relative z-10">
-            <h1 className="text-4xl sm:text-5xl font-bold mb-2 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
+            <h1 className="text-3xl sm:text-4xl font-bold mb-2 tracking-tight bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
               {t('login.title')}
             </h1>
-            <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-3"></div>
-            <p className="text-muted-foreground text-base font-light leading-relaxed tracking-wide">
+            <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto mb-2"></div>
+            <p className="text-muted-foreground text-sm font-light leading-relaxed tracking-wide">
               {t('login.subtitle')}
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6 relative z-10">
+          <form onSubmit={handleLogin} className="space-y-5 relative z-10">
             {/* Email Field */}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground/90 text-sm font-medium tracking-wide">
