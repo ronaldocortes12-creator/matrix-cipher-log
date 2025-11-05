@@ -194,28 +194,32 @@ const Index = () => {
           {/* Language Selector */}
           <div className="flex justify-center gap-2 mb-2 relative z-10">
             {[
-              { code: 'pt' as Language, flag: '🇧🇷', name: 'PT' },
-              { code: 'en' as Language, flag: '🇺🇸', name: 'EN' },
-              { code: 'es' as Language, flag: '🇪🇸', name: 'ES' }
+              { code: 'pt' as Language, flag: 'https://flagcdn.com/br.svg', name: 'PT', country: 'Brasil' },
+              { code: 'en' as Language, flag: 'https://flagcdn.com/us.svg', name: 'EN', country: 'USA' },
+              { code: 'es' as Language, flag: 'https://flagcdn.com/es.svg', name: 'ES', country: 'España' }
             ].map(lang => (
-              <button
-                key={lang.code}
-                type="button"
-                onClick={() => handleLanguageChange(lang.code)}
-                className={`
-                  px-4 py-2 rounded-lg glass-effect
-                  border transition-all duration-300
-                  flex items-center gap-2
-                  hover:scale-105 hover:border-primary/50
-                  ${selectedLanguage === lang.code 
-                    ? 'border-primary/80 shadow-[0_0_20px_rgba(77,208,225,0.3)]' 
-                    : 'border-primary/20'
-                  }
-                `}
-              >
-                <span className="text-xl">{lang.flag}</span>
-                <span className="text-sm font-medium text-foreground">{lang.name}</span>
-              </button>
+                  <button
+                    key={lang.code}
+                    type="button"
+                    onClick={() => handleLanguageChange(lang.code)}
+                    className={`
+                      px-4 py-2 rounded-lg glass-effect
+                      border transition-all duration-300
+                      flex items-center gap-2
+                      hover:scale-105 hover:border-primary/50
+                      ${selectedLanguage === lang.code 
+                        ? 'border-primary/80 shadow-[0_0_20px_rgba(77,208,225,0.3)]' 
+                        : 'border-primary/20'
+                      }
+                    `}
+                  >
+                    <img 
+                      src={lang.flag} 
+                      alt={lang.country}
+                      className="w-5 h-5 rounded-sm object-cover shadow-sm"
+                    />
+                    <span className="text-sm font-medium text-foreground">{lang.name}</span>
+                  </button>
             ))}
           </div>
 
