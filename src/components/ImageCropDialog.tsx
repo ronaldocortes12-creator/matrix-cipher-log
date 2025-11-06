@@ -103,9 +103,13 @@ const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<Blob> =>
     pixelCrop.height
   );
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
-      resolve(blob!);
+      if (!blob) {
+        reject(new Error('Falha ao processar imagem'));
+        return;
+      }
+      resolve(blob);
     }, 'image/jpeg', 0.95);
   });
 };

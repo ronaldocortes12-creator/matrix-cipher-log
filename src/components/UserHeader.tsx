@@ -119,6 +119,7 @@ export const UserHeader = () => {
         description: "Apenas arquivos JPG, PNG ou WEBP são permitidos",
         variant: "destructive"
       });
+      event.target.value = ''; // Reset input
       return;
     }
     
@@ -130,6 +131,7 @@ export const UserHeader = () => {
         description: "A imagem deve ter no máximo 2MB",
         variant: "destructive"
       });
+      event.target.value = ''; // Reset input
       return;
     }
     
@@ -140,54 +142,115 @@ export const UserHeader = () => {
       setShowCropDialog(true);
     };
     reader.readAsDataURL(file);
+    
+    // Reset input para permitir selecionar o mesmo arquivo novamente
+    event.target.value = '';
   };
 
   const handleCropComplete = async (croppedBlob: Blob) => {
     try {
       setUploading(true);
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
-
-      // Criar nome único do arquivo
+      // VALIDAÇÃO 1: Verificar se blob é válido
+      if (!croppedBlob || croppedBlob.size === 0) {
+        console.error('❌ Blob inválido ou vazio');
+        throw new Error('Imagem processada está vazia');
+      }
+      
+      console.log('📸 Iniciando upload - Tamanho do blob:', croppedBlob.size);
+      
+      // VALIDAÇÃO 2: Verificar autenticação
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('❌ Erro de autenticação:', authError);
+        throw new Error('Erro de autenticação');
+      }
+      if (!user) {
+        console.error('❌ Usuário não encontrado');
+        throw new Error('Usuário não autenticado');
+      }
+      
+      console.log('✅ Usuário autenticado:', user.id);
+      
+      // VALIDAÇÃO 3: Criar nome do arquivo
       const fileExt = 'jpg';
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-
-      // Converter blob para file
+      const timestamp = Date.now();
+      const fileName = `${user.id}/${timestamp}.${fileExt}`;
+      
+      console.log('📁 Nome do arquivo:', fileName);
+      
+      // VALIDAÇÃO 4: Converter blob para file
       const croppedFile = new File([croppedBlob], fileName, {
         type: 'image/jpeg'
       });
-
-      // Fazer upload para Supabase Storage
-      const { error: uploadError } = await supabase.storage
+      
+      console.log('📦 Arquivo criado:', {
+        name: croppedFile.name,
+        size: croppedFile.size,
+        type: croppedFile.type
+      });
+      
+      // VALIDAÇÃO 5: Fazer upload
+      console.log('⬆️ Iniciando upload para storage...');
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, croppedFile, {
           cacheControl: '3600',
           upsert: true
         });
-
-      if (uploadError) throw uploadError;
-
-      // Obter URL pública
+      
+      if (uploadError) {
+        console.error('❌ Erro no upload:', {
+          message: uploadError.message,
+          name: uploadError.name,
+          error: uploadError
+        });
+        throw uploadError;
+      }
+      
+      console.log('✅ Upload concluído:', uploadData);
+      
+      // VALIDAÇÃO 6: Obter URL pública
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName);
-
-      // Atualizar estado local
+      
+      console.log('🔗 URL pública gerada:', publicUrl);
+      
+      // VALIDAÇÃO 7: Atualizar estado
       setAvatarUrl(publicUrl);
-
+      setShowCropDialog(false);
+      
       toast({
-        title: "Sucesso",
+        title: "✅ Sucesso",
         description: "Foto enviada com sucesso!"
       });
-
-    } catch (error) {
-      console.error('Error uploading avatar:', error);
+      
+    } catch (error: any) {
+      console.error('❌ ERRO COMPLETO:', error);
+      
+      // Mensagens de erro mais específicas
+      let errorMessage = "Erro ao fazer upload da foto";
+      
+      if (error.message?.includes('autenticação') || error.message?.includes('autenticado')) {
+        errorMessage = "Sessão expirada. Faça login novamente.";
+      } else if (error.message?.includes('vazia') || error.message?.includes('processar')) {
+        errorMessage = "Falha ao processar imagem. Tente novamente.";
+      } else if (error.message?.includes('permission') || error.message?.includes('access denied')) {
+        errorMessage = "Sem permissão para fazer upload. Contate o suporte.";
+      } else if (error.message?.includes('size') || error.message?.includes('large')) {
+        errorMessage = "Imagem muito grande. Tamanho máximo: 2MB";
+      } else if (error.message) {
+        errorMessage = `Erro: ${error.message}`;
+      }
+      
       toast({
-        title: "Erro",
-        description: "Erro ao fazer upload da foto",
+        title: "❌ Erro",
+        description: errorMessage,
         variant: "destructive"
       });
+      
+      setShowCropDialog(false);
     } finally {
       setUploading(false);
     }
