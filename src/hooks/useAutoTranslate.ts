@@ -19,18 +19,20 @@ export const useAutoTranslate = () => {
       return texts;
     }
 
-    // Verificar cache
+    // Verificar cache com chave melhorada (evita colisões)
     const cachedResults: (string | null)[] = texts.map(text => {
-      const cacheKey = `${text.substring(0, 100)}...`; // Key baseada em início do texto
+      const cacheKey = `${targetLang}_${text.substring(0, 50)}_${text.length}_${text.substring(Math.max(0, text.length - 20))}`;
       return cache[cacheKey]?.[targetLang] || null;
     });
 
     const needsTranslation = texts.filter((_, i) => cachedResults[i] === null);
     
     if (needsTranslation.length === 0) {
+      console.log('[useAutoTranslate] Cache hit:', texts.length, 'texts');
       return cachedResults as string[];
     }
 
+    console.log('[useAutoTranslate] Translating:', needsTranslation.length, 'texts to', targetLang);
     setIsTranslating(true);
 
     try {
@@ -41,6 +43,7 @@ export const useAutoTranslate = () => {
       if (error) throw error;
 
       const translations = data.translations;
+      console.log('[useAutoTranslate] Received:', translations.length, 'translations');
 
       // Atualizar cache
       const newCache = { ...cache };
@@ -48,7 +51,7 @@ export const useAutoTranslate = () => {
       
       texts.forEach((text, i) => {
         if (cachedResults[i] === null) {
-          const cacheKey = `${text.substring(0, 100)}...`;
+          const cacheKey = `${targetLang}_${text.substring(0, 50)}_${text.length}_${text.substring(Math.max(0, text.length - 20))}`;
           if (!newCache[cacheKey]) newCache[cacheKey] = {};
           newCache[cacheKey][targetLang] = translations[translationIndex];
           cachedResults[i] = translations[translationIndex];
@@ -60,7 +63,7 @@ export const useAutoTranslate = () => {
       return cachedResults as string[];
 
     } catch (error) {
-      console.error('Translation error:', error);
+      console.error('[useAutoTranslate] Translation error:', error);
       return texts; // Fallback: retorna original
     } finally {
       setIsTranslating(false);

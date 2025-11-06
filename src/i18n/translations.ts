@@ -43,6 +43,10 @@ export const translations = {
       dayCompleteDesc: "Continue assim! Próximo dia desbloqueado.",
       errorTitle: "Erro",
       errorDesc: "Ocorreu um erro ao processar sua mensagem.",
+      loadingHistory: "Carregando histórico...",
+      translating: "Traduzindo...",
+      clickToComplete: "Clique para concluir o dia",
+      waitAuthorization: "Aguarde Jeff Wu autorizar a conclusão desta aula",
     },
     sidebar: {
       collapse: "Recolher",
@@ -181,6 +185,10 @@ export const translations = {
       dayCompleteDesc: "Keep it up! Next day unlocked.",
       errorTitle: "Error",
       errorDesc: "An error occurred while processing your message.",
+      loadingHistory: "Loading history...",
+      translating: "Translating...",
+      clickToComplete: "Click to complete the day",
+      waitAuthorization: "Wait for Jeff Wu to authorize the completion of this lesson",
     },
     sidebar: {
       collapse: "Collapse",
@@ -319,6 +327,10 @@ export const translations = {
       dayCompleteDesc: "¡Sigue así! Próximo día desbloqueado.",
       errorTitle: "Error",
       errorDesc: "Ocurrió un error al procesar tu mensaje.",
+      loadingHistory: "Cargando historial...",
+      translating: "Traduciendo...",
+      clickToComplete: "Haz clic para completar el día",
+      waitAuthorization: "Espera a que Jeff Wu autorice la finalización de esta lección",
     },
     sidebar: {
       collapse: "Contraer",

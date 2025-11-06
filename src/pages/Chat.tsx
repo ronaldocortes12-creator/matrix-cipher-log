@@ -254,14 +254,14 @@ const Chat = () => {
       await loadLessons(userId);
 
       toast({
-        title: "Dia concluído!",
-        description: `Parabéns! Você completou o Dia ${currentLesson.lesson_number}.`,
+        title: t('chat.dayCompleteTitle'),
+        description: t('chat.dayCompleteDesc'),
       });
 
     } catch (error: any) {
       console.error('[CompleteDay] Erro ao concluir dia:', error);
       toast({
-        title: "Erro ao concluir dia",
+        title: t('chat.errorTitle'),
         description: error.message,
         variant: "destructive"
       });
@@ -861,7 +861,7 @@ const Chat = () => {
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                 <span className="text-sm text-muted-foreground">
-                  Carregando histórico...
+                  {t('chat.loadingHistory')}
                 </span>
               </div>
             ) : (
@@ -912,11 +912,11 @@ const Chat = () => {
                   : 'opacity-50 cursor-not-allowed text-muted-foreground'
               }`}
               title={canCompleteLesson 
-                ? 'Clique para concluir o dia' 
-                : 'Aguarde Jeff Wu autorizar a conclusão desta aula'
+                ? t('chat.clickToComplete')
+                : t('chat.waitAuthorization')
               }
             >
-              {canCompleteLesson ? '✅' : '🔒'} Concluir Dia {lessons.find(l => l.id === activeLessonId)?.lesson_number}
+              {canCompleteLesson ? '✅' : '🔒'} {t('chat.completeDay')} {lessons.find(l => l.id === activeLessonId)?.lesson_number}
             </Button>
             </div>
           )}
@@ -926,7 +926,7 @@ const Chat = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-              placeholder="Digite sua mensagem..."
+              placeholder={t('chat.placeholder')}
               disabled={isSending || isLoadingHistory || !activeLessonId}
               className="flex-1 bg-background/50"
             />

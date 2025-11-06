@@ -14,7 +14,7 @@ export const TranslatedMessage = ({
   originalLanguage = 'pt',
   className = '' 
 }: TranslatedMessageProps) => {
-  const { language } = useLanguage();
+  const { language, t, subscribeToLanguageChange } = useLanguage();
   const { translate, isTranslating } = useAutoTranslate();
   const [translatedContent, setTranslatedContent] = useState(content);
 
@@ -29,13 +29,27 @@ export const TranslatedMessage = ({
     };
 
     performTranslation();
-  }, [content, language, originalLanguage, translate]);
+  }, [content, language, originalLanguage]);
+
+  // Re-traduzir quando idioma muda
+  useEffect(() => {
+    const unsubscribe = subscribeToLanguageChange(async () => {
+      if (language !== originalLanguage) {
+        const [translated] = await translate([content], language, originalLanguage);
+        setTranslatedContent(translated);
+      } else {
+        setTranslatedContent(content);
+      }
+    });
+    
+    return unsubscribe;
+  }, [content, language, originalLanguage, subscribeToLanguageChange, translate]);
 
   if (isTranslating && language !== originalLanguage) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" />
-        <span className="text-xs">Traduzindo...</span>
+        <span className="text-xs">{t('chat.translating')}</span>
       </div>
     );
   }
