@@ -14,6 +14,7 @@ import { LessonCompleteAnimation } from "@/components/LessonCompleteAnimation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { retryWithBackoff } from "@/utils/retryWithBackoff";
+import { TranslatedMessage } from "@/components/TranslatedMessage";
 
 type Message = {
   id: number;
@@ -883,13 +884,10 @@ const Chat = () => {
                           : "glass-effect text-foreground"
                       }`}
                     >
-                      <p 
-                        className="whitespace-pre-wrap text-sm leading-relaxed"
-                        dangerouslySetInnerHTML={{
-                          __html: message.content
-                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                            .replace(/\*([^\*]+?)\*/g, '<strong>$1</strong>')
-                        }}
+                      <TranslatedMessage 
+                        content={message.content}
+                        originalLanguage="pt"
+                        className="text-sm leading-relaxed"
                       />
                     </div>
                   </div>

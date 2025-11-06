@@ -4,6 +4,7 @@ import { UserHeader } from "./UserHeader";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSelector } from "./LanguageSelector";
 
 type Lesson = {
   id: string;
@@ -41,6 +42,11 @@ export const ChatSidebar = ({ lessons, activeLessonId, onSelectLesson, onToggleS
           </button>
         </div>
       )}
+
+      {/* Language Selector */}
+      <div className="px-4 pb-2">
+        <LanguageSelector />
+      </div>
 
       {/* Lessons List */}
       <ScrollArea className="flex-1">

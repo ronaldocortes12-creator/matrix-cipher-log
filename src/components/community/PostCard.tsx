@@ -9,6 +9,7 @@ import { ptBR, enUS, es } from "date-fns/locale";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { CommentSection } from "./CommentSection";
+import { TranslatedMessage } from "@/components/TranslatedMessage";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -152,7 +153,9 @@ export const PostCard = ({
       </div>
 
       {/* Conteúdo */}
-      <p className="mb-4 whitespace-pre-wrap text-foreground">{post.content}</p>
+      <div className="mb-4 text-foreground">
+        <TranslatedMessage content={post.content} originalLanguage="pt" />
+      </div>
       
       {/* Imagem se houver */}
       {post.image_url && (
