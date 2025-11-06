@@ -7,6 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR, enUS, es } from "date-fns/locale";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
+import { TranslatedMessage } from "@/components/TranslatedMessage";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -143,7 +144,11 @@ export const CommentItem = ({
             </AlertDialog>
           )}
         </div>
-        <p className="text-sm text-foreground mb-2">{comment.content}</p>
+        <TranslatedMessage 
+          content={comment.content} 
+          originalLanguage="pt"
+          className="text-sm text-foreground mb-2"
+        />
         <Button 
           variant="ghost" 
           size="sm"

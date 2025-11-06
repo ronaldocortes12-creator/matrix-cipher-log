@@ -42,8 +42,28 @@ export const useAutoTranslate = () => {
 
       if (error) throw error;
 
-      const translations = data.translations;
-      console.log('[useAutoTranslate] Received:', translations.length, 'translations');
+      // Normalizar resposta
+      let translations = data.translations;
+      
+      // Se não for array, tentar transformar
+      if (!Array.isArray(translations)) {
+        if (typeof translations === 'string') {
+          translations = [translations];
+        } else {
+          console.error('[useAutoTranslate] Invalid response format:', translations);
+          return texts; // Fallback
+        }
+      }
+      
+      console.log('[useAutoTranslate] Received:', translations.length, 'translations for', needsTranslation.length, 'texts');
+
+      // Garantir que temos traduções para todos os textos solicitados
+      if (translations.length !== needsTranslation.length) {
+        console.warn('[useAutoTranslate] Length mismatch - padding with originals');
+        while (translations.length < needsTranslation.length) {
+          translations.push(needsTranslation[translations.length]);
+        }
+      }
 
       // Atualizar cache
       const newCache = { ...cache };

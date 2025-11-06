@@ -35,14 +35,14 @@ Deno.serve(async (req) => {
     
     const prompt = `You are a professional translator. Translate the following texts to ${languageNames[targetLanguage]}. 
 
-IMPORTANT RULES:
-- Return ONLY the translations, one per line
-- Maintain the same order
+CRITICAL RULES:
+- Return ONLY a valid JSON object with this exact format: {"translations":["text1","text2",...]}
+- The translations array MUST have exactly ${texts.length} items
 - Keep markdown formatting (**bold**, *italic*)
-- Don't add explanations or comments
-- For technical terms related to crypto/trading, keep them in English if they're commonly used that way
+- For technical terms related to crypto/trading, keep them in English if commonly used
 - Preserve emojis and special characters
 - Keep numbers and percentages as they are
+- DO NOT add explanations, comments, or any text outside the JSON object
 
 Texts to translate:
 ${texts.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n')}`;
@@ -87,21 +87,54 @@ ${texts.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n')}`;
     }
 
     const aiData = await aiResponse.json();
-    const translatedText = aiData.choices[0].message.content;
+    const translatedText = aiData.choices[0].message.content || '';
     
-    // Parse resposta (assumindo formato numerado)
-    const translations = translatedText
-      .split('\n')
-      .filter((line: string) => line.trim())
-      .map((line: string) => line.replace(/^\d+\.\s*/, '').trim());
-
-    // Se número de traduções não bater, retornar erro
-    if (translations.length !== texts.length) {
-      console.error('Translation count mismatch:', {
-        expected: texts.length,
-        received: translations.length,
-        translatedText
-      });
+    console.log('[Translate] Expected:', texts.length, 'texts');
+    
+    // Parse JSON robusto
+    let translations: string[] = [];
+    
+    try {
+      // Extrair JSON do conteúdo
+      const jsonMatch = translatedText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error('[Translate] No JSON found in response:', translatedText.substring(0, 200));
+        throw new Error('No JSON object in AI response');
+      }
+      
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      // Validar estrutura
+      if (!parsed.translations || !Array.isArray(parsed.translations)) {
+        console.error('[Translate] Invalid JSON structure:', parsed);
+        throw new Error('Invalid translations structure');
+      }
+      
+      translations = parsed.translations;
+      
+      // Normalizar para garantir mesmo tamanho
+      if (translations.length !== texts.length) {
+        console.warn('[Translate] Count mismatch - expected:', texts.length, 'received:', translations.length);
+        
+        // Caso especial: 1 input, 1 output (mesmo que seja string)
+        if (texts.length === 1 && translations.length >= 1) {
+          translations = [translations[0]];
+        } else if (translations.length < texts.length) {
+          // Completar com textos originais
+          while (translations.length < texts.length) {
+            translations.push(texts[translations.length]);
+          }
+        } else {
+          // Truncar excesso
+          translations = translations.slice(0, texts.length);
+        }
+      }
+      
+      console.log('[Translate] Success:', translations.length, 'translations');
+      
+    } catch (error) {
+      console.error('[Translate] Parse error:', error);
+      console.error('[Translate] AI response:', translatedText.substring(0, 500));
       
       // Fallback: retornar textos originais
       return new Response(
