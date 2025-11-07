@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAutoTranslate } from '@/hooks/useAutoTranslate';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Loader2 } from 'lucide-react';
@@ -17,18 +17,28 @@ export const TranslatedMessage = ({
   const { language, t, subscribeToLanguageChange } = useLanguage();
   const { translate, isTranslating } = useAutoTranslate();
   const [translatedContent, setTranslatedContent] = useState(content);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Debounced translation for streaming content
   useEffect(() => {
-    const performTranslation = async () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(async () => {
       if (language !== originalLanguage) {
         const [translated] = await translate([content], language, originalLanguage);
         setTranslatedContent(translated);
       } else {
         setTranslatedContent(content);
       }
-    };
+    }, 400);
 
-    performTranslation();
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [content, language, originalLanguage]);
 
   // Re-traduzir quando idioma muda
