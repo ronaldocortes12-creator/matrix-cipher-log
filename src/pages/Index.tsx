@@ -165,7 +165,7 @@ const Index = () => {
 
       {/* Login Container with Scale */}
       <div className="w-full flex justify-center" style={{ zIndex: 10 }}>
-        <div className="origin-top scale-[0.85] sm:scale-90 lg:scale-[0.7] transition-transform duration-300">
+        <div className="origin-top scale-100 md:scale-95 lg:scale-[0.85] transition-transform duration-300">
           <div className="w-full max-w-sm px-5 py-0">
             {/* Logo */}
             <div className="flex justify-center mb-4">
