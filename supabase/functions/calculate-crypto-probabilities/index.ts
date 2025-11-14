@@ -443,9 +443,10 @@ Deno.serve(async (req) => {
         const n10 = mcap10dLogReturns.length;
         z10 = (mu10 / (sigma10 + EPSILON)) * Math.sqrt(n10);
         
-        // Lógica correta: Entrada de dinheiro (z > 0) → P(alta) maior
+        // ⚡ INVERSÃO CONTRARIAN: outflow (z<0) → alta prob, inflow (z>0) → baixa prob
+        // Removido o sinal negativo para inverter a lógica
         const S10 = 1.8;
-        p10 = 1 / (1 + Math.exp(-S10 * z10));
+        p10 = 1 / (1 + Math.exp(S10 * z10));
         
         // Reforço por ΔUSD absoluto
         const THRESHOLD_10D_USD = 100e9; // 100 bilhões
@@ -464,7 +465,7 @@ Deno.serve(async (req) => {
         p10 = Math.min(0.95, Math.max(0.05, p10));
         
         const variacao10d = (delta10USD / mcapInicial10d) * 100;
-        const flowType = delta10USD >= 0 ? 'INFLOW (→ ALTA)' : 'OUTFLOW (→ QUEDA)';
+        const flowType = delta10USD >= 0 ? 'INFLOW (→ OVERBOUGHT/QUEDA)' : 'OUTFLOW (→ OVERSOLD/ALTA)';
         
         console.log(`  📊 Market Cap inicial (10d): $${(mcapInicial10d / 1e12).toFixed(2)}T`);
         console.log(`  📊 Market Cap final (hoje): $${(mcapFinal10d / 1e12).toFixed(2)}T`);
@@ -521,9 +522,9 @@ Deno.serve(async (req) => {
         const n40 = mcap40dLogReturns.length;
         z40 = (mu40 / (sigma40 + EPSILON)) * Math.sqrt(n40);
         
-        // Lógica correta: Entrada de dinheiro (z > 0) → P(alta) maior
+        // ⚡ INVERSÃO CONTRARIAN: mesma lógica do componente 10 dias
         const S40 = 1.4;
-        p40 = 1 / (1 + Math.exp(-S40 * z40));
+        p40 = 1 / (1 + Math.exp(S40 * z40));
         
         // Reforço por ΔUSD absoluto
         const THRESHOLD_40D_USD = 200e9; // 200 bilhões
