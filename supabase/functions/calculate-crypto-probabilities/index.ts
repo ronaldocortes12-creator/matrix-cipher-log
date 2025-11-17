@@ -448,17 +448,25 @@ Deno.serve(async (req) => {
         const S10 = 1.8;
         p10 = 1 / (1 + Math.exp(S10 * z10));
         
-        // Reforço por ΔUSD absoluto
+        // Reforço por ΔUSD absoluto (⚡ INVERTIDO para lógica contrarian)
         const THRESHOLD_10D_USD = 100e9; // 100 bilhões
         const GAMMA_10 = 0.8;
         const NORM_10 = 200e9; // 200 bilhões
         
         if (Math.abs(delta10USD) >= THRESHOLD_10D_USD) {
-          const deltaLogit = (delta10USD / NORM_10) * GAMMA_10;
+          const deltaLogit = -(delta10USD / NORM_10) * GAMMA_10; // ⚡ Sinal negativo: outflow reforça alta
           const logit10 = Math.log(p10 / (1 - p10 + EPSILON));
           const logit10Reinforced = logit10 + deltaLogit;
           p10 = 1 / (1 + Math.exp(-logit10Reinforced));
           console.log(`  🔥 Reforço 10d aplicado: ΔUSD=${(delta10USD/1e9).toFixed(2)}B → shift=${deltaLogit.toFixed(4)}`);
+          
+          // Validação shadow contrarian
+          if (delta10USD < 0 && p10 < 0.5) {
+            console.error(`  🚨 Contrarian violated (10d): ΔUSD<0 mas p10=${(p10*100).toFixed(1)}%`);
+          }
+          if (delta10USD > 0 && p10 > 0.5) {
+            console.error(`  🚨 Contrarian violated (10d): ΔUSD>0 mas p10=${(p10*100).toFixed(1)}%`);
+          }
         }
         
         // Clamp final
@@ -526,23 +534,31 @@ Deno.serve(async (req) => {
         const S40 = 1.4;
         p40 = 1 / (1 + Math.exp(S40 * z40));
         
-        // Reforço por ΔUSD absoluto
+        // Reforço por ΔUSD absoluto (⚡ INVERTIDO para lógica contrarian)
         const THRESHOLD_40D_USD = 200e9; // 200 bilhões
         const GAMMA_40 = 0.6;
         const NORM_40 = 400e9; // 400 bilhões
         
         if (Math.abs(delta40USD) >= THRESHOLD_40D_USD) {
-          const deltaLogit = (delta40USD / NORM_40) * GAMMA_40;
+          const deltaLogit = -(delta40USD / NORM_40) * GAMMA_40; // ⚡ Sinal negativo: outflow reforça alta
           const logit40 = Math.log(p40 / (1 - p40 + EPSILON));
           const logit40Reinforced = logit40 + deltaLogit;
           p40 = 1 / (1 + Math.exp(-logit40Reinforced));
           console.log(`  🔥 Reforço 40d aplicado: ΔUSD=${(delta40USD/1e9).toFixed(2)}B → shift=${deltaLogit.toFixed(4)}`);
+          
+          // Validação shadow contrarian
+          if (delta40USD < 0 && p40 < 0.5) {
+            console.error(`  🚨 Contrarian violated (40d): ΔUSD<0 mas p40=${(p40*100).toFixed(1)}%`);
+          }
+          if (delta40USD > 0 && p40 > 0.5) {
+            console.error(`  🚨 Contrarian violated (40d): ΔUSD>0 mas p40=${(p40*100).toFixed(1)}%`);
+          }
         }
         
         p40 = Math.min(0.95, Math.max(0.05, p40));
         
         const variacao40d = (delta40USD / mcapInicial40d) * 100;
-        const flowType = delta40USD >= 0 ? 'INFLOW (→ ALTA)' : 'OUTFLOW (→ QUEDA)';
+        const flowType = delta40USD >= 0 ? 'INFLOW (→ OVERBOUGHT/QUEDA)' : 'OUTFLOW (→ OVERSOLD/ALTA)';
         
         console.log(`  📊 Market Cap inicial (40d): $${(mcapInicial40d / 1e12).toFixed(2)}T`);
         console.log(`  📊 Market Cap final (hoje): $${(mcapFinal40d / 1e12).toFixed(2)}T`);
