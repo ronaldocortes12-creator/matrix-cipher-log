@@ -788,8 +788,47 @@ Deno.serve(async (req) => {
         console.log(`     P(alta|mcap) = ${(pAltaMcap * 100).toFixed(2)}% [GLOBAL - MCAP 10d+40d]`);
 
         // ========== COMBINAÇÃO FINAL (55% mcap + 25% BTC + 20% preço) ==========
-        const pAltaFinal = (0.55 * pAltaMcap) + (0.25 * pAltaBTC) + (0.20 * pAltaPreco);
+        const pAltaFinalRaw = (0.55 * pAltaMcap) + (0.25 * pAltaBTC) + (0.20 * pAltaPreco);
+
+        // Regime contrarian (oversold) + piso global pelo Market Cap
+        const REGIME_PMCAP_THRESHOLD = 0.60; // quando p_mcap já está alto
+        const THRESHOLD_OUTFLOW_10D = 100e9;  // outflow forte recente
+        const oversoldByMcap = pAltaMcap >= REGIME_PMCAP_THRESHOLD;
+        const oversoldByDelta10 = delta10USD < -THRESHOLD_OUTFLOW_10D;
+        const oversoldByZ = (z10 < -0.5) && (z40 <= 0);
+        const oversoldRegime = oversoldByMcap || oversoldByDelta10 || oversoldByZ;
+
+        // Pesos dinâmicos em oversold (puxar mais pelo global)
+        const Wm = oversoldRegime ? 0.70 : 0.55;
+        const Wb = oversoldRegime ? 0.15 : 0.25;
+        const Wp = oversoldRegime ? 0.15 : 0.20;
+
+        // Ajuste do BTC no regime: se BTC 10d estiver negativo, inverte para não arrastar contra o oversold global
+        const pAltaBTCAdj = oversoldRegime && (btc10dZScore < 0)
+          ? (1 - pAltaBTC)
+          : pAltaBTC;
+
+        const pAltaFinalRegime = (Wm * pAltaMcap) + (Wb * pAltaBTCAdj) + (Wp * pAltaPreco);
+
+        // Piso contrarian global: nunca abaixo de p_mcap
+        let pAltaFinal = Math.max(oversoldRegime ? pAltaFinalRegime : pAltaFinalRaw, pAltaMcap);
         const pQuedaFinal = 1 - pAltaFinal;
+
+        if (oversoldRegime) {
+          console.log(
+            `     ⚖️ Regime: OVERSOLD CONTRARIAN ON (floor aplicado pelo p_mcap=${(pAltaMcap*100).toFixed(2)}%)`);
+          console.log(
+            `     • Motivos: mcap≥${(REGIME_PMCAP_THRESHOLD*100)}%=${oversoldByMcap}, Δ10<-${(THRESHOLD_OUTFLOW_10D/1e9)}B=${oversoldByDelta10}, z10<-0.5 && z40≤0=${oversoldByZ}`);
+          console.log(
+            `     • p_final_raw=${(pAltaFinalRaw*100).toFixed(2)}% → p_final_regime=${(pAltaFinalRegime*100).toFixed(2)}% → p_final(com floor)=${(pAltaFinal*100).toFixed(2)}%`);
+        } else {
+          console.log(`     ⚖️ Regime: NORMAL (p_final_raw=${(pAltaFinalRaw*100).toFixed(2)}%, floor=${(pAltaMcap*100).toFixed(2)}%)`);
+        }
+
+        // Shadow assert: não deve violar piso quando oversold claro
+        if (delta10USD < 0 && pAltaMcap > 0.55 && pAltaFinal < 0.5) {
+          console.error(`     🚨 Global contrarian floor violated: Δ10USD<0, p_mcap=${(pAltaMcap*100).toFixed(1)}% mas p_final=${(pAltaFinal*100).toFixed(1)}%`);
+        }
 
         let direction: 'alta' | 'queda';
         let probabilityPercentage: number;
@@ -810,7 +849,13 @@ Deno.serve(async (req) => {
         const sigmaLogPriceSombra = standardDeviation(logPricesSombra);
         const zPriceSombra = (Math.log(precoAtual) - muLogPriceSombra) / (sigmaLogPriceSombra + EPSILON);
         const pAltaPrecoSombra = Math.min(0.95, Math.max(0.05, 1 / (1 + Math.exp(-SLOPE_PRICE * zPriceSombra))));
-        const pAltaFinalSombra = (0.55 * pAltaMcap) + (0.25 * pAltaBTC) + (0.20 * pAltaPrecoSombra);
+        // Recalcular p_final sombra com a mesma lógica de regime e piso
+        const pAltaFinalRawSombra = (0.55 * pAltaMcap) + (0.25 * pAltaBTC) + (0.20 * pAltaPrecoSombra);
+        const pAltaBTCAdjSombra = oversoldRegime && (btc10dZScore < 0)
+          ? (1 - pAltaBTC)
+          : pAltaBTC;
+        const pAltaFinalRegimeSombra = (Wm * pAltaMcap) + (Wb * pAltaBTCAdjSombra) + (Wp * pAltaPrecoSombra);
+        const pAltaFinalSombra = Math.max(oversoldRegime ? pAltaFinalRegimeSombra : pAltaFinalRawSombra, pAltaMcap);
         
         const diffPAltaPreco = Math.abs(pAltaPreco - pAltaPrecoSombra);
         const diffPFinal = Math.abs(pAltaFinal - pAltaFinalSombra);
