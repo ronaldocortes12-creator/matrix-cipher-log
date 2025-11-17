@@ -39,6 +39,17 @@ const EPSILON = 1e-10;
 // Tolerâncias para validação
 const TOLERANCE_PROB = 0.001; // 0.1 p.p.
 const MIN_DISPERSION_PP = 1.0; // dispersão mínima entre criptos (em pontos percentuais)
+const BETA_OVERSOLD = 0.6; // Soft bias para regime oversold
+
+// Funções auxiliares para logit/sigmoid
+function logit(p: number): number {
+  const clamped = Math.max(0.001, Math.min(0.999, p));
+  return Math.log(clamped / (1 - clamped));
+}
+
+function sigmoid(x: number): number {
+  return 1 / (1 + Math.exp(-x));
+}
 
 /**
  * ╔════════════════════════════════════════════════════════════════════╗
@@ -810,24 +821,21 @@ Deno.serve(async (req) => {
 
         const pAltaFinalRegime = (Wm * pAltaMcap) + (Wb * pAltaBTCAdj) + (Wp * pAltaPreco);
 
-        // Piso contrarian global: nunca abaixo de p_mcap
-        let pAltaFinal = Math.max(oversoldRegime ? pAltaFinalRegime : pAltaFinalRaw, pAltaMcap);
+        // Soft bias no espaço logit (em vez de piso duro)
+        const base = oversoldRegime ? pAltaFinalRegime : pAltaFinalRaw;
+        const bias = oversoldRegime ? BETA_OVERSOLD * logit(pAltaMcap) : 0;
+        let pAltaFinal = sigmoid(logit(base) + bias);
         const pQuedaFinal = 1 - pAltaFinal;
 
         if (oversoldRegime) {
           console.log(
-            `     ⚖️ Regime: OVERSOLD CONTRARIAN ON (floor aplicado pelo p_mcap=${(pAltaMcap*100).toFixed(2)}%)`);
+            `     ⚖️ Regime: OVERSOLD CONTRARIAN ON (soft bias aplicado pelo p_mcap=${(pAltaMcap*100).toFixed(2)}%)`);
           console.log(
             `     • Motivos: mcap≥${(REGIME_PMCAP_THRESHOLD*100)}%=${oversoldByMcap}, Δ10<-${(THRESHOLD_OUTFLOW_10D/1e9)}B=${oversoldByDelta10}, z10<-0.5 && z40≤0=${oversoldByZ}`);
           console.log(
-            `     • p_final_raw=${(pAltaFinalRaw*100).toFixed(2)}% → p_final_regime=${(pAltaFinalRegime*100).toFixed(2)}% → p_final(com floor)=${(pAltaFinal*100).toFixed(2)}%`);
+            `     • base=${(base*100).toFixed(2)}%, bias=${bias.toFixed(4)}, p_final=${(pAltaFinal*100).toFixed(2)}%`);
         } else {
-          console.log(`     ⚖️ Regime: NORMAL (p_final_raw=${(pAltaFinalRaw*100).toFixed(2)}%, floor=${(pAltaMcap*100).toFixed(2)}%)`);
-        }
-
-        // Shadow assert: não deve violar piso quando oversold claro
-        if (delta10USD < 0 && pAltaMcap > 0.55 && pAltaFinal < 0.5) {
-          console.error(`     🚨 Global contrarian floor violated: Δ10USD<0, p_mcap=${(pAltaMcap*100).toFixed(1)}% mas p_final=${(pAltaFinal*100).toFixed(1)}%`);
+          console.log(`     ⚖️ Regime: NORMAL (p_final_raw=${(pAltaFinalRaw*100).toFixed(2)}%)`);
         }
 
         let direction: 'alta' | 'queda';
@@ -849,13 +857,15 @@ Deno.serve(async (req) => {
         const sigmaLogPriceSombra = standardDeviation(logPricesSombra);
         const zPriceSombra = (Math.log(precoAtual) - muLogPriceSombra) / (sigmaLogPriceSombra + EPSILON);
         const pAltaPrecoSombra = Math.min(0.95, Math.max(0.05, 1 / (1 + Math.exp(-SLOPE_PRICE * zPriceSombra))));
-        // Recalcular p_final sombra com a mesma lógica de regime e piso
+        // Recalcular p_final sombra com a mesma lógica de soft bias
         const pAltaFinalRawSombra = (0.55 * pAltaMcap) + (0.25 * pAltaBTC) + (0.20 * pAltaPrecoSombra);
         const pAltaBTCAdjSombra = oversoldRegime && (btc10dZScore < 0)
           ? (1 - pAltaBTC)
           : pAltaBTC;
         const pAltaFinalRegimeSombra = (Wm * pAltaMcap) + (Wb * pAltaBTCAdjSombra) + (Wp * pAltaPrecoSombra);
-        const pAltaFinalSombra = Math.max(oversoldRegime ? pAltaFinalRegimeSombra : pAltaFinalRawSombra, pAltaMcap);
+        const baseSombra = oversoldRegime ? pAltaFinalRegimeSombra : pAltaFinalRawSombra;
+        const biasSombra = oversoldRegime ? BETA_OVERSOLD * logit(pAltaMcap) : 0;
+        const pAltaFinalSombra = sigmoid(logit(baseSombra) + biasSombra);
         
         const diffPAltaPreco = Math.abs(pAltaPreco - pAltaPrecoSombra);
         const diffPFinal = Math.abs(pAltaFinal - pAltaFinalSombra);
@@ -1119,6 +1129,18 @@ Deno.serve(async (req) => {
     console.log(`   • ${successCount} criptos calculadas com sucesso`);
     console.log(`   • ${fallbackCount} criptos usaram fallback (CoinGecko)`);
     console.log(`   • ${CRYPTOS.length - successCount} criptos falharam`);
+    
+    // Verificar dispersão dos resultados
+    if (shadowResults.length > 1) {
+      const probs = shadowResults.map(r => r.p_final);
+      const minProb = Math.min(...probs);
+      const maxProb = Math.max(...probs);
+      const dispersionPP = (maxProb - minProb) * 100;
+      console.log(`   ✅ Dispersão adequada: ${dispersionPP.toFixed(2)}pp ≥ ${MIN_DISPERSION_PP}pp`);
+      if (dispersionPP < MIN_DISPERSION_PP) {
+        console.warn(`   ⚠️ Baixa dispersão: ${dispersionPP.toFixed(2)}pp < ${MIN_DISPERSION_PP}pp - verificar se resultados são muito similares`);
+      }
+    }
     
     console.log(`\n📊 DETALHAMENTO POR CRIPTO (${shadowResults.length}):`);
     shadowResults.forEach((r, idx) => {
