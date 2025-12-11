@@ -32,8 +32,9 @@ Deno.serve(async (req) => {
     const baseUrl = Deno.env.get('SITE_URL') || 'https://ddmimmbnuvcqlndkawar.lovableproject.com';
     const setupUrl = `${baseUrl}/set-password?token=${setupToken}`;
     const displayName = fullName || email.split('@')[0];
-    const planLabel = planDuration === '12M' ? '12 meses' : '30 dias';
-    const subject = `Acesso Global Institute System [${planDuration}]`;
+    // Garantir que seja sempre 30 dias (plano único atual)
+    const planLabel = '30 dias';
+    const subject = `Bem-vindo ao Global Institute of Crypto - Acesso ${planLabel}`;
 
     // Premium HTML Email Template - Aligned with System Design
     const htmlContent = `
@@ -50,13 +51,11 @@ Deno.serve(async (req) => {
       <td style="padding: 40px 20px;">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: 0 auto; max-width: 600px;">
           
-          <!-- Logo with Glow Effect -->
+          <!-- Logo Real do Sistema -->
           <tr>
             <td style="text-align: center; padding-bottom: 30px;">
-              <div style="display: inline-block; padding: 15px 30px; border-radius: 12px; background: rgba(77, 208, 225, 0.05); border: 1px solid rgba(77, 208, 225, 0.2); box-shadow: 0 0 30px rgba(77, 208, 225, 0.1);">
-                <h2 style="color: #D4AF37; font-size: 22px; font-weight: 700; margin: 0; letter-spacing: 3px; text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);">
-                  🏛️ GLOBAL INSTITUTE OF CRYPTO
-                </h2>
+              <div style="display: inline-block; padding: 25px 45px; background: linear-gradient(135deg, #0a0a0f 0%, #1a1f2c 50%, #0f0f16 100%); border-radius: 16px; border: 1px solid rgba(77, 208, 225, 0.3); box-shadow: 0 0 50px rgba(77, 208, 225, 0.2), inset 0 0 30px rgba(77, 208, 225, 0.05);">
+                <img src="https://ddmimmbnuvcqlndkawar.supabase.co/storage/v1/object/public/avatars/logo-email.png" alt="Global Institute of Crypto" width="280" style="display: block; max-width: 100%; height: auto;">
               </div>
             </td>
           </tr>
