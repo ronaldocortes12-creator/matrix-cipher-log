@@ -1,4 +1,5 @@
 import { Resend } from 'https://esm.sh/resend@2.0.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 
@@ -9,9 +10,9 @@ const corsHeaders = {
 
 interface WelcomeEmailRequest {
   email: string;
-  fullName: string;
-  planDuration: string;
-  setupToken: string;
+  fullName?: string;
+  planDuration?: string;
+  userId: string; // REQUIRED - user_id for the token
 }
 
 Deno.serve(async (req) => {
@@ -20,23 +21,56 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, fullName, planDuration, setupToken }: WelcomeEmailRequest = await req.json();
+    const { email, fullName, planDuration, userId }: WelcomeEmailRequest = await req.json();
 
-    if (!email || !setupToken) {
+    if (!email || !userId) {
       return new Response(
-        JSON.stringify({ error: 'Email e token são obrigatórios' }),
+        JSON.stringify({ error: 'Email e userId são obrigatórios' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // Initialize Supabase Admin Client
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Generate unique token
+    const generatedToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+
+    console.log(`🔑 Gerando token: ${generatedToken} para userId: ${userId}`);
+
+    // Insert token into database BEFORE sending email
+    const { error: insertError } = await supabaseAdmin
+      .from('password_setup_tokens')
+      .insert({
+        token: generatedToken,
+        email: email,
+        full_name: fullName || null,
+        plan_duration: planDuration || '30D',
+        expires_at: expiresAt,
+        user_id: userId
+      });
+
+    if (insertError) {
+      console.error('❌ Erro ao criar token no banco:', insertError);
+      return new Response(
+        JSON.stringify({ error: `Erro ao criar token: ${insertError.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`✅ Token criado no banco com sucesso`);
+
     const baseUrl = Deno.env.get('SITE_URL') || 'https://globalinstituteofcripto.com';
-    const setupUrl = `${baseUrl}/set-password?token=${setupToken}`;
+    const setupUrl = `${baseUrl}/set-password?token=${generatedToken}`;
     const displayName = fullName || email.split('@')[0];
-    // Garantir que seja sempre 30 dias (plano único atual)
     const planLabel = '30 dias';
     const subject = `Bem-vindo ao Global Institute of Crypto - Acesso ${planLabel}`;
 
-    // Premium HTML Email Template - Aligned with System Design
+    // Premium HTML Email Template
     const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -75,13 +109,11 @@ Deno.serve(async (req) => {
                   <tr>
                     <td style="padding: 45px 40px; position: relative;">
                       
-                      <!-- Corner Accents (CSS pseudo-elements simulated with borders) -->
+                      <!-- Corner Accents -->
                       <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                         <tr>
                           <td>
-                            <!-- Top Left Corner -->
                             <div style="position: absolute; top: 15px; left: 15px; width: 25px; height: 25px; border-top: 2px solid #4DD0E1; border-left: 2px solid #4DD0E1;"></div>
-                            <!-- Top Right Corner -->
                             <div style="position: absolute; top: 15px; right: 15px; width: 25px; height: 25px; border-top: 2px solid #4DD0E1; border-right: 2px solid #4DD0E1;"></div>
                           </td>
                         </tr>
@@ -168,9 +200,7 @@ Deno.serve(async (req) => {
                       <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                         <tr>
                           <td>
-                            <!-- Bottom Left Corner -->
                             <div style="position: absolute; bottom: 15px; left: 15px; width: 25px; height: 25px; border-bottom: 2px solid #4DD0E1; border-left: 2px solid #4DD0E1;"></div>
-                            <!-- Bottom Right Corner -->
                             <div style="position: absolute; bottom: 15px; right: 15px; width: 25px; height: 25px; border-bottom: 2px solid #4DD0E1; border-right: 2px solid #4DD0E1;"></div>
                           </td>
                         </tr>
@@ -214,6 +244,7 @@ Deno.serve(async (req) => {
     `.trim();
 
     console.log(`📧 Enviando e-mail de boas-vindas para: ${email}`);
+    console.log(`🔗 URL de setup: ${setupUrl}`);
 
     const { data, error } = await resend.emails.send({
       from: 'Professor Jeff Wu <jeffwu@globalinstituteofcripto.com>',
@@ -233,7 +264,12 @@ Deno.serve(async (req) => {
     console.log(`✅ E-mail enviado com sucesso: ${data?.id}`);
 
     return new Response(
-      JSON.stringify({ success: true, emailId: data?.id }),
+      JSON.stringify({ 
+        success: true, 
+        emailId: data?.id,
+        token: generatedToken,
+        setupUrl: setupUrl
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
