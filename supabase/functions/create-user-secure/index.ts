@@ -312,28 +312,7 @@ Deno.serve(async (req) => {
       );
     }
     
-    // 10. Gerar token seguro para configuração de senha
-    const setupToken = crypto.randomUUID() + '-' + crypto.randomUUID();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // Expira em 7 dias
-    
-    // 11. Salvar token no banco
-    const { error: tokenError } = await supabaseAdmin
-      .from('password_setup_tokens')
-      .insert({
-        user_id: data.user.id,
-        token: setupToken,
-        email: email,
-        full_name: fullName,
-        plan_duration: planDuration,
-        expires_at: expiresAt.toISOString()
-      });
-    
-    if (tokenError) {
-      console.error('❌ Erro ao salvar token:', tokenError);
-    }
-    
-    // 12. Enviar e-mail de boas-vindas
+    // 10. Enviar e-mail de boas-vindas (que agora cria o token automaticamente)
     try {
       const emailResponse = await fetch(
         `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-welcome-email`,
@@ -347,7 +326,7 @@ Deno.serve(async (req) => {
             email: email,
             fullName: fullName,
             planDuration: planDuration,
-            setupToken: setupToken
+            userId: data.user.id // send-welcome-email agora cria o token
           })
         }
       );
@@ -363,7 +342,7 @@ Deno.serve(async (req) => {
       // Não falhar a criação do usuário se o e-mail falhar
     }
     
-    // 13. Log de sucesso
+    // 11. Log de sucesso
     await logAudit(
       supabaseAdmin,
       'user_created',
