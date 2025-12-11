@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.set-user-password]
 verify_jwt = false
+
+[functions.upload-logo-to-storage]
+verify_jwt = false

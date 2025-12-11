@@ -50,15 +50,14 @@ Deno.serve(async (req) => {
       <td style="padding: 40px 20px;">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: 0 auto; max-width: 600px;">
           
-          <!-- Logo -->
+          <!-- Logo - Text fallback while image loads -->
           <tr>
             <td style="text-align: center; padding-bottom: 30px;">
-              <img 
-                src="${baseUrl}/images/logo-email.png" 
-                alt="Global Institute of Crypto" 
-                width="280" 
-                style="max-width: 280px; height: auto;"
-              />
+              <h2 style="color: #D4AF37; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: 2px;">
+                🏛️ GLOBAL INSTITUTE OF CRYPTO
+              </h2>
+            </td>
+          </tr>
             </td>
           </tr>
           
