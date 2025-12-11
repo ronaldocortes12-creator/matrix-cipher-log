@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Welcome1 from "./pages/Welcome1";
 import Welcome2 from "./pages/Welcome2";
@@ -16,6 +17,7 @@ import Market from "./pages/Market";
 import Community from "./pages/Community";
 import LanguageSelection from "./pages/LanguageSelection";
 import SetPassword from "./pages/SetPassword";
+import AccessExpired from "./pages/AccessExpired";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,16 +32,57 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/set-password" element={<SetPassword />} />
-            <Route path="/language-selection" element={<LanguageSelection />} />
-            <Route path="/welcome/1" element={<Welcome1 />} />
-            <Route path="/welcome/2" element={<Welcome2 />} />
-            <Route path="/welcome/3" element={<Welcome3 />} />
-            <Route path="/welcome/4" element={<Welcome4 />} />
-            <Route path="/welcome/5" element={<Welcome5 />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/market" element={<Market />} />
-            <Route path="/community" element={<Community />} />
+            <Route path="/access-expired" element={<AccessExpired />} />
+            <Route path="/language-selection" element={
+              <ProtectedRoute requireSubscription={false}>
+                <LanguageSelection />
+              </ProtectedRoute>
+            } />
+            <Route path="/welcome/1" element={
+              <ProtectedRoute requireSubscription={false}>
+                <Welcome1 />
+              </ProtectedRoute>
+            } />
+            <Route path="/welcome/2" element={
+              <ProtectedRoute requireSubscription={false}>
+                <Welcome2 />
+              </ProtectedRoute>
+            } />
+            <Route path="/welcome/3" element={
+              <ProtectedRoute requireSubscription={false}>
+                <Welcome3 />
+              </ProtectedRoute>
+            } />
+            <Route path="/welcome/4" element={
+              <ProtectedRoute requireSubscription={false}>
+                <Welcome4 />
+              </ProtectedRoute>
+            } />
+            <Route path="/welcome/5" element={
+              <ProtectedRoute requireSubscription={false}>
+                <Welcome5 />
+              </ProtectedRoute>
+            } />
+            <Route path="/chat" element={
+              <ProtectedRoute>
+                <Chat />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/market" element={
+              <ProtectedRoute>
+                <Market />
+              </ProtectedRoute>
+            } />
+            <Route path="/community" element={
+              <ProtectedRoute>
+                <Community />
+              </ProtectedRoute>
+            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

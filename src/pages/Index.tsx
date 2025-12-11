@@ -95,47 +95,7 @@ const Index = () => {
     }
   };
 
-  const handleSignup = async () => {
-    setIsLoading(true);
-    try {
-      const redirectUrl = `${window.location.origin}/`;
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: redirectUrl }
-      });
-      if (error) throw error;
-
-      toast({
-        title: t('login.signupSuccess'),
-        description: t('login.signupDescription'),
-      });
-
-      // Executar enforcement para usuário recém-criado
-      if (data.user) {
-        try {
-          console.log('[Signup] Enforcing lesson states for new user:', data.user.id);
-          await supabase.functions.invoke('enforce-lesson-states', {
-            body: { user_id: data.user.id }
-          });
-          console.log('[Signup] Lesson states enforced successfully');
-        } catch (enforceError) {
-          console.error('[Signup] Error enforcing lesson states:', enforceError);
-        }
-      }
-
-      // Redirecionar para seleção de idioma após signup
-      window.location.href = "/language-selection";
-    } catch (error: any) {
-      toast({
-        title: t('login.signupError'),
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Signup removido - usuários devem comprar via Ticto
 
   const handleLanguageChange = async (lang: Language) => {
     setSelectedLanguage(lang);
@@ -294,28 +254,10 @@ const Index = () => {
                   {t('login.loginButton')}
                 </Button>
 
-                {/* Divider */}
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-primary/20"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">{t('login.or')}</span>
-                  </div>
-                </div>
-
-                {/* Register Link */}
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">
-                    {t('login.noAccount')}{" "}
-                    <button
-                      type="button"
-                      onClick={handleSignup}
-                      className="text-primary hover:text-primary/80 font-medium transition-colors"
-                      disabled={isLoading}
-                    >
-                      {t('login.signupButton')}
-                    </button>
+                {/* Info about signup */}
+                <div className="text-center pt-2">
+                  <p className="text-xs text-muted-foreground/70">
+                    Acesso exclusivo para alunos matriculados
                   </p>
                 </div>
               </form>

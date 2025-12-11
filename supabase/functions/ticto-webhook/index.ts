@@ -188,7 +188,39 @@ Deno.serve(async (req) => {
 
     console.log(`✅ [${requestId}] Email enviado:`, emailResult);
 
-    // 8. Registrar auditoria
+    // 8. Criar assinatura de 30 dias
+    console.log(`📅 [${requestId}] Criando assinatura de 30 dias...`);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // Primeiro, cancelar assinaturas anteriores (se houver)
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({ status: 'cancelled' })
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+    // Criar nova assinatura
+    const { data: subscription, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .insert({
+        user_id: userId,
+        status: 'active',
+        plan_type: '30D',
+        starts_at: new Date().toISOString(),
+        expires_at: expiresAt.toISOString()
+      })
+      .select()
+      .single();
+
+    if (subError) {
+      console.error(`❌ [${requestId}] Erro ao criar assinatura:`, subError);
+      // Não retornar erro aqui - usuário já foi criado e email enviado
+    } else {
+      console.log(`✅ [${requestId}] Assinatura criada: ${subscription.id}, expira em: ${expiresAt.toISOString()}`);
+    }
+
+    // 9. Registrar auditoria
     await supabaseAdmin.from('audit_logs').insert({
       user_id: userId,
       action: 'ticto_purchase_processed',
@@ -199,6 +231,8 @@ Deno.serve(async (req) => {
         product_id: payload.product?.id,
         email: email,
         email_sent: true,
+        subscription_id: subscription?.id,
+        expires_at: expiresAt.toISOString(),
         timestamp: new Date().toISOString()
       }
     });
@@ -206,6 +240,7 @@ Deno.serve(async (req) => {
     console.log(`\n🎉 [${requestId}] ========== SUCESSO ==========`);
     console.log(`🎉 [${requestId}] Usuário: ${email} (${userId})`);
     console.log(`🎉 [${requestId}] Email de boas-vindas enviado!`);
+    console.log(`🎉 [${requestId}] Assinatura ativa até: ${expiresAt.toISOString()}`);
     console.log(`🎉 [${requestId}] =============================\n`);
 
     return new Response(
