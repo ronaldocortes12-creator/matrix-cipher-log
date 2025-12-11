@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
           <tr>
             <td style="text-align: center; padding-bottom: 30px;">
               <div style="display: inline-block; padding: 25px 45px; background: linear-gradient(135deg, #0a0a0f 0%, #1a1f2c 50%, #0f0f16 100%); border-radius: 16px; border: 1px solid rgba(77, 208, 225, 0.3); box-shadow: 0 0 50px rgba(77, 208, 225, 0.2), inset 0 0 30px rgba(77, 208, 225, 0.05);">
-                <img src="https://ddmimmbnuvcqlndkawar.supabase.co/storage/v1/object/public/avatars/logo-email.png" alt="Global Institute of Crypto" width="280" style="display: block; max-width: 100%; height: auto;">
+                <img src="https://globalinstituteofcripto.com/images/logo-email.png" alt="Global Institute of Crypto" width="280" style="display: block; max-width: 100%; height: auto; filter: drop-shadow(0 0 10px rgba(77, 208, 225, 0.5));">
               </div>
             </td>
           </tr>
