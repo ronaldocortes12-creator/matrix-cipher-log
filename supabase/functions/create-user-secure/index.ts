@@ -282,10 +282,12 @@ Deno.serve(async (req) => {
       );
     }
     
-    // 8. Criar usuário
+    // 8. Extrair duração do plano (padrão: 30D)
+    const planDuration = body.plan_duration || '30D';
+    
+    // 9. Criar usuário SEM senha (será definida pelo próprio usuário)
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
-      password: rawPassword, // Senha não sanitizada (será hasheada)
       email_confirm: true,
       user_metadata: {
         full_name: fullName
@@ -310,16 +312,67 @@ Deno.serve(async (req) => {
       );
     }
     
-    // 9. Log de sucesso
+    // 10. Gerar token seguro para configuração de senha
+    const setupToken = crypto.randomUUID() + '-' + crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // Expira em 7 dias
+    
+    // 11. Salvar token no banco
+    const { error: tokenError } = await supabaseAdmin
+      .from('password_setup_tokens')
+      .insert({
+        user_id: data.user.id,
+        token: setupToken,
+        email: email,
+        full_name: fullName,
+        plan_duration: planDuration,
+        expires_at: expiresAt.toISOString()
+      });
+    
+    if (tokenError) {
+      console.error('❌ Erro ao salvar token:', tokenError);
+    }
+    
+    // 12. Enviar e-mail de boas-vindas
+    try {
+      const emailResponse = await fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-welcome-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
+          },
+          body: JSON.stringify({
+            email: email,
+            fullName: fullName,
+            planDuration: planDuration,
+            setupToken: setupToken
+          })
+        }
+      );
+      
+      if (!emailResponse.ok) {
+        const errorText = await emailResponse.text();
+        console.error('❌ Erro ao enviar e-mail:', errorText);
+      } else {
+        console.log('📧 E-mail de boas-vindas enviado com sucesso');
+      }
+    } catch (emailError) {
+      console.error('❌ Erro ao chamar função de e-mail:', emailError);
+      // Não falhar a criação do usuário se o e-mail falhar
+    }
+    
+    // 13. Log de sucesso
     await logAudit(
       supabaseAdmin,
       'user_created',
-      { email, user_id: data.user.id },
+      { email, user_id: data.user.id, plan_duration: planDuration },
       true,
       clientIP
     );
     
-    console.log(`✅ Usuário criado: ${email}`);
+    console.log(`✅ Usuário criado: ${email} (plano: ${planDuration})`);
     
     return new Response(
       JSON.stringify({ 
@@ -328,7 +381,8 @@ Deno.serve(async (req) => {
           id: data.user.id,
           email: data.user.email,
           created_at: data.user.created_at
-        }
+        },
+        message: 'Usuário criado. E-mail de configuração enviado.'
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

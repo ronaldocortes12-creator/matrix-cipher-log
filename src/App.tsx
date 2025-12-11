@@ -15,6 +15,7 @@ import Dashboard from "./pages/Dashboard";
 import Market from "./pages/Market";
 import Community from "./pages/Community";
 import LanguageSelection from "./pages/LanguageSelection";
+import SetPassword from "./pages/SetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/set-password" element={<SetPassword />} />
             <Route path="/language-selection" element={<LanguageSelection />} />
             <Route path="/welcome/1" element={<Welcome1 />} />
             <Route path="/welcome/2" element={<Welcome2 />} />
