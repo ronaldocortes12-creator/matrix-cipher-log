@@ -1337,6 +1337,7 @@ export type Database = {
         Returns: string
       }
       daily_backup_log: { Args: never; Returns: undefined }
+      expire_subscriptions: { Args: never; Returns: undefined }
       has_active_subscription: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
