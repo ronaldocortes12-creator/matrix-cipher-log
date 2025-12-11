@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const baseUrl = Deno.env.get('SITE_URL') || 'https://ddmimmbnuvcqlndkawar.lovable.app';
+    const baseUrl = Deno.env.get('SITE_URL') || 'https://globalinstituteofcripto.com';
     const setupUrl = `${baseUrl}/set-password?token=${setupToken}`;
     const displayName = fullName || email.split('@')[0];
     // Garantir que seja sempre 30 dias (plano único atual)
