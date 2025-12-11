@@ -26,3 +26,12 @@ verify_jwt = false
 
 [functions.translate-content]
 verify_jwt = true
+
+[functions.create-user-secure]
+verify_jwt = false
+
+[functions.send-welcome-email]
+verify_jwt = false
+
+[functions.set-user-password]
+verify_jwt = false

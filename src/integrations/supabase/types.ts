@@ -822,6 +822,42 @@ export type Database = {
         }
         Relationships: []
       }
+      password_setup_tokens: {
+        Row: {
+          created_at: string | null
+          email: string
+          expires_at: string
+          full_name: string | null
+          id: string
+          plan_duration: string | null
+          token: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          expires_at: string
+          full_name?: string | null
+          id?: string
+          plan_duration?: string | null
+          token: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          full_name?: string | null
+          id?: string
+          plan_duration?: string | null
+          token?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_status: Database["public"]["Enums"]["account_status"] | null
