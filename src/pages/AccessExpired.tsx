@@ -9,8 +9,7 @@ const AccessExpired = () => {
   const { t } = useLanguage();
   
   const handleRenew = () => {
-    // Link para página de compra Ticto
-    window.open('https://pay.ticto.com.br/checkout/seu-produto', '_blank');
+    window.open('https://payment.ticto.app/O91100587', '_blank');
   };
 
   const handleLogout = async () => {
