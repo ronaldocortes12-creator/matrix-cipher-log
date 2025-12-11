@@ -38,44 +38,69 @@ const SetPassword = () => {
 
   useEffect(() => {
     const validateToken = async () => {
+      console.log("🔍 [SetPassword] Iniciando validação do token...");
+      console.log("🔍 [SetPassword] Token recebido:", token ? `${token.substring(0, 8)}...` : "NENHUM");
+      
       if (!token) {
+        console.error("❌ [SetPassword] Token não fornecido na URL");
         setError("Token não fornecido. Verifique o link no seu e-mail.");
         setIsValidating(false);
         return;
       }
 
       try {
+        console.log("📡 [SetPassword] Buscando token no banco de dados...");
         const { data, error: fetchError } = await supabase
           .from("password_setup_tokens")
           .select("email, full_name, plan_duration, expires_at, used_at")
           .eq("token", token)
           .single();
 
-        if (fetchError || !data) {
-          setError("Link inválido ou expirado.");
+        if (fetchError) {
+          console.error("❌ [SetPassword] Erro ao buscar token:", fetchError);
+          setError("Link inválido ou expirado. Verifique se o link está correto.");
           setIsValidating(false);
           return;
         }
 
+        if (!data) {
+          console.error("❌ [SetPassword] Token não encontrado no banco");
+          setError("Link inválido. Solicite um novo acesso.");
+          setIsValidating(false);
+          return;
+        }
+
+        console.log("📋 [SetPassword] Token encontrado:", {
+          email: data.email,
+          expires_at: data.expires_at,
+          used_at: data.used_at,
+        });
+
         if (data.used_at) {
+          console.warn("⚠️ [SetPassword] Token já foi utilizado em:", data.used_at);
           setError("Este link já foi utilizado. Faça login com sua senha.");
           setIsValidating(false);
           return;
         }
 
-        if (new Date(data.expires_at) < new Date()) {
+        const expiresAt = new Date(data.expires_at);
+        const now = new Date();
+        if (expiresAt < now) {
+          console.warn("⚠️ [SetPassword] Token expirado:", { expires_at: expiresAt, now });
           setError("Este link expirou. Solicite um novo acesso.");
           setIsValidating(false);
           return;
         }
 
+        console.log("✅ [SetPassword] Token válido! Usuário:", data.email);
         setTokenData({
           email: data.email,
           full_name: data.full_name || data.email.split("@")[0],
           plan_duration: data.plan_duration || "30D",
         });
         setIsValidating(false);
-      } catch {
+      } catch (err) {
+        console.error("❌ [SetPassword] Erro inesperado na validação:", err);
         setError("Erro ao validar o link. Tente novamente.");
         setIsValidating(false);
       }
@@ -87,25 +112,49 @@ const SetPassword = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isValid || !token) return;
+    if (!isValid || !token) {
+      console.warn("⚠️ [SetPassword] Submit bloqueado - validação incompleta ou token ausente");
+      return;
+    }
 
     setIsLoading(true);
+    console.log("📤 [SetPassword] Enviando requisição para configurar senha...");
+    console.log("📤 [SetPassword] Token:", token.substring(0, 8) + "...");
 
     try {
+      // Timeout de 30 segundos para a requisição
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const response = await supabase.functions.invoke("set-user-password", {
         body: { token, password },
       });
 
+      clearTimeout(timeoutId);
+
+      console.log("📥 [SetPassword] Resposta recebida:", {
+        error: response.error,
+        data: response.data ? { ...response.data, password: "[REDACTED]" } : null,
+      });
+
       if (response.error) {
+        console.error("❌ [SetPassword] Erro na resposta:", response.error);
         throw new Error(response.error.message || "Erro ao configurar senha");
       }
 
       const data = response.data;
 
+      if (!data) {
+        console.error("❌ [SetPassword] Resposta vazia da edge function");
+        throw new Error("Resposta inválida do servidor");
+      }
+
       if (!data.success) {
+        console.error("❌ [SetPassword] Operação falhou:", data.error);
         throw new Error(data.error || "Erro ao configurar senha");
       }
 
+      console.log("✅ [SetPassword] Senha configurada com sucesso!");
       setSuccess(true);
       
       toast({
@@ -119,9 +168,19 @@ const SetPassword = () => {
       }, 3000);
 
     } catch (err: any) {
+      console.error("❌ [SetPassword] Erro no handleSubmit:", err);
+      
+      let errorMessage = "Erro ao configurar senha. Tente novamente.";
+      
+      if (err.name === "AbortError") {
+        errorMessage = "Tempo esgotado. Verifique sua conexão e tente novamente.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
       toast({
         title: "Erro",
-        description: err.message || "Erro ao configurar senha. Tente novamente.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
