@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     const planLabel = planDuration === '12M' ? '12 meses' : '30 dias';
     const subject = `Acesso Global Institute System [${planDuration}]`;
 
-    // Premium HTML Email Template
+    // Premium HTML Email Template - Aligned with System Design
     const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -50,114 +50,158 @@ Deno.serve(async (req) => {
       <td style="padding: 40px 20px;">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: 0 auto; max-width: 600px;">
           
-          <!-- Logo - Text fallback while image loads -->
+          <!-- Logo with Glow Effect -->
           <tr>
             <td style="text-align: center; padding-bottom: 30px;">
-              <h2 style="color: #D4AF37; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: 2px;">
-                🏛️ GLOBAL INSTITUTE OF CRYPTO
-              </h2>
-            </td>
-          </tr>
+              <div style="display: inline-block; padding: 15px 30px; border-radius: 12px; background: rgba(77, 208, 225, 0.05); border: 1px solid rgba(77, 208, 225, 0.2); box-shadow: 0 0 30px rgba(77, 208, 225, 0.1);">
+                <h2 style="color: #D4AF37; font-size: 22px; font-weight: 700; margin: 0; letter-spacing: 3px; text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);">
+                  🏛️ GLOBAL INSTITUTE OF CRYPTO
+                </h2>
+              </div>
             </td>
           </tr>
           
-          <!-- Main Card -->
+          <!-- Gradient Divider -->
+          <tr>
+            <td style="text-align: center; padding-bottom: 30px;">
+              <div style="width: 120px; height: 2px; margin: 0 auto; background: linear-gradient(90deg, transparent, #4DD0E1, transparent);"></div>
+            </td>
+          </tr>
+          
+          <!-- Main Card with Corner Accents -->
           <tr>
             <td>
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background: linear-gradient(135deg, rgba(26, 31, 44, 0.95) 0%, rgba(10, 10, 15, 0.98) 100%); border-radius: 16px; border: 1px solid rgba(77, 208, 225, 0.2);">
-                <tr>
-                  <td style="padding: 40px;">
-                    
-                    <!-- Greeting -->
-                    <h1 style="color: #D4AF37; font-size: 28px; font-weight: 700; margin: 0 0 10px 0; text-align: center;">
-                      Parabéns, ${displayName}!
-                    </h1>
-                    
-                    <div style="width: 80px; height: 2px; background: linear-gradient(90deg, transparent, #4DD0E1, transparent); margin: 0 auto 30px auto;"></div>
-                    
-                    <!-- Message -->
-                    <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0 0 20px 0; text-align: center;">
-                      Você acaba de dar um passo decisivo ao ingressar no mercado mais revolucionário do mundo.
-                    </p>
-                    
-                    <p style="color: #e5e5e5; font-size: 16px; line-height: 1.7; margin: 0 0 30px 0; text-align: center;">
-                      Ao levar este processo a sério durante os próximos <strong style="color: #4DD0E1;">${planLabel}</strong>, você terá a oportunidade de se tornar um <strong style="color: #D4AF37;">operador fora da curva</strong> — e, de fato, transformar sua vida.
-                    </p>
-                    
-                    <!-- Divider -->
-                    <div style="border-top: 1px solid rgba(77, 208, 225, 0.2); margin: 30px 0;"></div>
-                    
-                    <!-- Access Info -->
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background: rgba(77, 208, 225, 0.05); border-radius: 12px; border: 1px solid rgba(77, 208, 225, 0.15);">
-                      <tr>
-                        <td style="padding: 25px;">
-                          <p style="color: #4DD0E1; font-size: 14px; font-weight: 600; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px;">
-                            Informações de Acesso
-                          </p>
-                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                            <tr>
-                              <td style="padding: 8px 0;">
-                                <span style="color: #9ca3af; font-size: 14px;">📧 E-mail:</span>
-                                <span style="color: #ffffff; font-size: 14px; font-weight: 600; margin-left: 10px;">${email}</span>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px 0;">
-                                <span style="color: #9ca3af; font-size: 14px;">⏱️ Período:</span>
-                                <span style="color: #D4AF37; font-size: 14px; font-weight: 600; margin-left: 10px;">${planLabel} de acesso</span>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                    
-                    <!-- CTA Button -->
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-top: 35px;">
-                      <tr>
-                        <td style="text-align: center;">
-                          <a 
-                            href="${setupUrl}" 
-                            style="display: inline-block; background: linear-gradient(135deg, #D4AF37 0%, #B8860B 100%); color: #0a0a0f; font-size: 16px; font-weight: 700; text-decoration: none; padding: 18px 50px; border-radius: 8px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3);"
-                          >
-                            Configurar Senha
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                    
-                    <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 20px;">
-                      Este link expira em 7 dias.
-                    </p>
-                    
-                    <!-- Divider -->
-                    <div style="border-top: 1px solid rgba(77, 208, 225, 0.2); margin: 30px 0;"></div>
-                    
-                    <!-- Signature -->
-                    <p style="color: #e5e5e5; font-size: 15px; margin: 0; text-align: center;">
-                      Atenciosamente,
-                    </p>
-                    <p style="color: #D4AF37; font-size: 18px; font-weight: 600; margin: 10px 0 5px 0; text-align: center;">
-                      Professor Jeff Wu
-                    </p>
-                    <p style="color: #4DD0E1; font-size: 13px; margin: 0; text-align: center; letter-spacing: 1px;">
-                      Global Institute of Crypto
-                    </p>
-                    
-                  </td>
-                </tr>
-              </table>
+              <div style="position: relative; padding: 3px; border-radius: 20px; background: linear-gradient(135deg, rgba(77, 208, 225, 0.3), rgba(77, 208, 225, 0.1), rgba(212, 175, 55, 0.2)); box-shadow: 0 0 40px rgba(77, 208, 225, 0.15), inset 0 0 60px rgba(77, 208, 225, 0.05);">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background: linear-gradient(135deg, rgba(26, 31, 44, 0.98) 0%, rgba(15, 15, 22, 0.99) 50%, rgba(10, 10, 15, 1) 100%); border-radius: 18px;">
+                  <tr>
+                    <td style="padding: 45px 40px; position: relative;">
+                      
+                      <!-- Corner Accents (CSS pseudo-elements simulated with borders) -->
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                        <tr>
+                          <td>
+                            <!-- Top Left Corner -->
+                            <div style="position: absolute; top: 15px; left: 15px; width: 25px; height: 25px; border-top: 2px solid #4DD0E1; border-left: 2px solid #4DD0E1;"></div>
+                            <!-- Top Right Corner -->
+                            <div style="position: absolute; top: 15px; right: 15px; width: 25px; height: 25px; border-top: 2px solid #4DD0E1; border-right: 2px solid #4DD0E1;"></div>
+                          </td>
+                        </tr>
+                      </table>
+                      
+                      <!-- Greeting -->
+                      <h1 style="color: #D4AF37; font-size: 28px; font-weight: 700; margin: 0 0 10px 0; text-align: center; text-shadow: 0 0 30px rgba(212, 175, 55, 0.4);">
+                        Parabéns, ${displayName}!
+                      </h1>
+                      
+                      <!-- Gradient Divider -->
+                      <div style="width: 80px; height: 2px; background: linear-gradient(90deg, transparent, #D4AF37, transparent); margin: 15px auto 30px auto;"></div>
+                      
+                      <!-- Message -->
+                      <p style="color: #e5e5e5; font-size: 16px; line-height: 1.8; margin: 0 0 20px 0; text-align: center;">
+                        Você acaba de dar um passo decisivo ao ingressar no mercado mais revolucionário do mundo.
+                      </p>
+                      
+                      <p style="color: #e5e5e5; font-size: 16px; line-height: 1.8; margin: 0 0 30px 0; text-align: center;">
+                        Ao levar este processo a sério durante os próximos <strong style="color: #4DD0E1; text-shadow: 0 0 10px rgba(77, 208, 225, 0.3);">${planLabel}</strong>, você terá a oportunidade de se tornar um <strong style="color: #D4AF37; text-shadow: 0 0 10px rgba(212, 175, 55, 0.3);">operador fora da curva</strong> — e, de fato, transformar sua vida.
+                      </p>
+                      
+                      <!-- Gradient Divider -->
+                      <div style="width: 100%; height: 1px; background: linear-gradient(90deg, transparent, rgba(77, 208, 225, 0.4), transparent); margin: 30px 0;"></div>
+                      
+                      <!-- Access Info Box with Glow -->
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background: linear-gradient(135deg, rgba(77, 208, 225, 0.08) 0%, rgba(77, 208, 225, 0.03) 100%); border-radius: 14px; border: 1px solid rgba(77, 208, 225, 0.25); box-shadow: 0 0 25px rgba(77, 208, 225, 0.1), inset 0 0 30px rgba(77, 208, 225, 0.03);">
+                        <tr>
+                          <td style="padding: 28px;">
+                            <p style="color: #4DD0E1; font-size: 13px; font-weight: 600; margin: 0 0 18px 0; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px rgba(77, 208, 225, 0.4);">
+                              ⚡ Informações de Acesso
+                            </p>
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                              <tr>
+                                <td style="padding: 10px 0; border-bottom: 1px solid rgba(77, 208, 225, 0.1);">
+                                  <span style="color: #9ca3af; font-size: 14px;">📧 E-mail:</span>
+                                  <span style="color: #ffffff; font-size: 14px; font-weight: 600; margin-left: 12px;">${email}</span>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td style="padding: 10px 0;">
+                                  <span style="color: #9ca3af; font-size: 14px;">⏱️ Período:</span>
+                                  <span style="color: #D4AF37; font-size: 14px; font-weight: 600; margin-left: 12px; text-shadow: 0 0 10px rgba(212, 175, 55, 0.3);">${planLabel} de acesso</span>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      
+                      <!-- CTA Button with Premium Glow -->
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-top: 35px;">
+                        <tr>
+                          <td style="text-align: center;">
+                            <a 
+                              href="${setupUrl}" 
+                              style="display: inline-block; background: linear-gradient(135deg, #D4AF37 0%, #C9A227 50%, #B8860B 100%); color: #0a0a0f; font-size: 15px; font-weight: 700; text-decoration: none; padding: 18px 55px; border-radius: 10px; text-transform: uppercase; letter-spacing: 2px; box-shadow: 0 6px 30px rgba(212, 175, 55, 0.4), 0 0 50px rgba(212, 175, 55, 0.2);"
+                            >
+                              🔐 Configurar Senha
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      
+                      <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 18px; font-style: italic;">
+                        ⚠️ Este link expira em 7 dias.
+                      </p>
+                      
+                      <!-- Gradient Divider -->
+                      <div style="width: 100%; height: 1px; background: linear-gradient(90deg, transparent, rgba(77, 208, 225, 0.4), transparent); margin: 30px 0;"></div>
+                      
+                      <!-- Signature with Style -->
+                      <p style="color: #9ca3af; font-size: 14px; margin: 0; text-align: center; letter-spacing: 1px;">
+                        Atenciosamente,
+                      </p>
+                      <p style="color: #D4AF37; font-size: 20px; font-weight: 700; margin: 12px 0 8px 0; text-align: center; text-shadow: 0 0 20px rgba(212, 175, 55, 0.4);">
+                        Professor Jeff Wu
+                      </p>
+                      <p style="color: #4DD0E1; font-size: 12px; margin: 0; text-align: center; letter-spacing: 2px; text-transform: uppercase;">
+                        Global Institute of Crypto
+                      </p>
+                      
+                      <!-- Bottom Corner Accents -->
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                        <tr>
+                          <td>
+                            <!-- Bottom Left Corner -->
+                            <div style="position: absolute; bottom: 15px; left: 15px; width: 25px; height: 25px; border-bottom: 2px solid #4DD0E1; border-left: 2px solid #4DD0E1;"></div>
+                            <!-- Bottom Right Corner -->
+                            <div style="position: absolute; bottom: 15px; right: 15px; width: 25px; height: 25px; border-bottom: 2px solid #4DD0E1; border-right: 2px solid #4DD0E1;"></div>
+                          </td>
+                        </tr>
+                      </table>
+                      
+                    </td>
+                  </tr>
+                </table>
+              </div>
             </td>
           </tr>
           
-          <!-- Footer -->
+          <!-- Gradient Spacer -->
           <tr>
-            <td style="padding-top: 30px; text-align: center;">
-              <p style="color: #4b5563; font-size: 12px; margin: 0;">
+            <td style="text-align: center; padding-top: 25px;">
+              <div style="width: 60px; height: 2px; margin: 0 auto; background: linear-gradient(90deg, transparent, rgba(77, 208, 225, 0.3), transparent);"></div>
+            </td>
+          </tr>
+          
+          <!-- Premium Footer -->
+          <tr>
+            <td style="padding-top: 25px; text-align: center;">
+              <p style="color: #4DD0E1; font-size: 11px; margin: 0 0 12px 0; font-family: 'Courier New', monospace; letter-spacing: 3px; text-shadow: 0 0 10px rgba(77, 208, 225, 0.3);">
+                🔒 SECURE • 🛡️ ENCRYPTED • ✓ VERIFIED
+              </p>
+              <p style="color: #4b5563; font-size: 11px; margin: 0;">
                 © 2025 Global Institute of Crypto. Todos os direitos reservados.
               </p>
-              <p style="color: #374151; font-size: 11px; margin: 10px 0 0 0; font-family: monospace;">
-                SECURE • ENCRYPTED • VERIFIED
+              <p style="color: #374151; font-size: 10px; margin: 8px 0 0 0;">
+                Este e-mail foi enviado automaticamente. Por favor, não responda.
               </p>
             </td>
           </tr>
