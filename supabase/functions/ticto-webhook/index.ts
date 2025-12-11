@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
 
     // 3. Verificar status da transação (se aplicável)
     const status = payload.status?.toLowerCase();
-    if (status && !['approved', 'paid', 'completed', 'aprovado', 'pago'].includes(status)) {
+    if (status && !['approved', 'paid', 'completed', 'aprovado', 'pago', 'authorized', 'autorizado'].includes(status)) {
       console.log(`⏸️ [${requestId}] Status não é aprovado: ${status} - ignorando`);
       return new Response(
         JSON.stringify({ success: true, message: 'Webhook recebido mas status não requer ação' }),
