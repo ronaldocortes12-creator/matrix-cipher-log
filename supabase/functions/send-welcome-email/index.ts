@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
           <tr>
             <td style="text-align: center; padding-bottom: 30px;">
               <img 
-                src="https://ddmimmbnuvcqlndkawar.supabase.co/storage/v1/object/public/avatars/logo-main.png" 
+                src="${baseUrl}/images/logo-email.png" 
                 alt="Global Institute of Crypto" 
                 width="280" 
                 style="max-width: 280px; height: auto;"
